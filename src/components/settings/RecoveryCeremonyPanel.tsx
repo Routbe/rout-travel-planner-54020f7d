@@ -13,7 +13,7 @@ import { enclave, EnclaveError } from "@/lib/crypto-enclave/client";
 import { refreshSessionFreshness } from "@/lib/auth/step-up.functions";
 import { addPasskey } from "@/lib/webauthn.functions";
 import { deviceLabelFrom } from "@/lib/passkey-label";
-import { ceremonyFromWire, ceremonyToWire, fromB64, wordCount } from "@/lib/recovery/ceremony-wire";
+import { ceremonyFromWire, ceremonyToWire, fromB64, toB64, wordCount } from "@/lib/recovery/ceremony-wire";
 import {
   beginCeremonyRestore, deleteRecoveryCeremony, finishCeremonyRestore, getRecoveryCeremonyStatus, getRecoveryServerKey, saveRecoveryCeremony,
 } from "@/lib/recovery/ceremony.functions";
@@ -250,7 +250,7 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
       const { withPasskeyPrf } = await import("@/lib/recovery/passkey-prf");
       const sealed = await withPasskeyPrf("ceremony", async (output, credential) => ({ credential, ...(await enclave.ceremony.sealDevice(h, output)) }));
       scope.assertCurrent();
-      const r = await withStepUp(() => save({ data: { ceremony: ceremonyToWire(sealed.ceremony, sealed.keyId), deviceCredential: sealed.credential } }));
+      const r = await withStepUp(() => save({ data: { ceremony: ceremonyToWire(sealed.ceremony, sealed.keyId), deviceCredential: sealed.credential, loginKey: toB64(sealed.loginKey) } }));
       if (!r.ok) throw new Error("ROUT kon zijn stuk niet controleren. Begin opnieuw.");
       await enclave.ceremony.commit(h, userId);
       handle.current = null;

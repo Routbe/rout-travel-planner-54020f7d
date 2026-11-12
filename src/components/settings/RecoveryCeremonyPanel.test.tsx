@@ -37,6 +37,7 @@ describe("2-of-3 recovery wizard", () => {
     mock.sealDevice.mockResolvedValue({
       ceremony: { version: 1, ceremonyId: "0".repeat(32), memberId: "m", threshold: 2, sealedMaster: new Uint8Array(60), shards: { device_prf: new Uint8Array(80), paper_guardian: new Uint8Array(80), server_guardian: new Uint8Array(80) } },
       keyId: "key-1",
+      loginKey: new Uint8Array(32).fill(9),
     });
     mock.prf.mockImplementation(async (_purpose: string, consume: (o: Uint8Array, c: string) => Promise<unknown>) => consume(new Uint8Array(32), "credential-1"));
     mock.save.mockResolvedValue({ ok: true });

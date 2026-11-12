@@ -55,7 +55,9 @@ export const getRecoveryServerKey = createServerFn({ method: "GET" })
 
 export const saveRecoveryCeremony = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((d: unknown) => z.object({ ceremony: wireSchema, deviceCredential: credentialSchema }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ ceremony: wireSchema, deviceCredential: credentialSchema, loginKey: z.string().regex(/^[A-Za-z0-9+/]{43}=$/) }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { requirePasskeyStepUp } = await import("@/lib/auth/step-up-guard.server");
     await requirePasskeyStepUp(context.userId, "recovery_vault");
@@ -71,7 +73,7 @@ export const saveRecoveryCeremony = createServerFn({ method: "POST" })
       return { ok: false as const, error: "server_shard_mismatch" };
     }
     const { sql } = await import("@/lib/neon");
-    await sql`select public.rout_recovery_ceremony_put(${c.ceremonyId}, ${c.keyId}, ${c.sealedMaster}, ${c.shards.device_prf}, ${c.shards.paper_guardian}, ${c.shards.server_guardian}, ${data.deviceCredential})`;
+    await sql`select public.rout_recovery_ceremony_put(${c.ceremonyId}, ${c.keyId}, ${c.sealedMaster}, ${c.shards.device_prf}, ${c.shards.paper_guardian}, ${c.shards.server_guardian}, ${data.deviceCredential}, ${data.loginKey})`;
     const { notifyUser } = await import("@/lib/notifications.server");
     await notifyUser(context.userId, "recovery_vault_changed", { action: "saved" });
     await audit(context.userId, "recovery_ceremony.saved", { ceremonyId: c.ceremonyId });
