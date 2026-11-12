@@ -33,9 +33,11 @@ async function setup(userId: string) {
 }
 
 describe("sign-in by recovery in the crypto enclave", () => {
-  const userId = "00000000-0000-4000-8000-0000000000d1";
+  let n = 0;
+  const nextUser = () => `00000000-0000-4000-8000-0000000000d${++n}`;
 
   it("any two pieces sign the server challenge with the key whose public half was stored", async () => {
+    const userId = nextUser();
     const { ceremony, keyId, loginKey, paper } = await setup(userId);
     expect(loginKey).toHaveLength(32);
     const server = () => openServerShard(structuredClone(ceremony), userId, SECRET);
@@ -51,13 +53,14 @@ describe("sign-in by recovery in the crypto enclave", () => {
       expect(verifyRecoveryLogin(loginKey, userId, CHALLENGE, r.signature)).toBe(true);
       // Bound to member and challenge.
       expect(verifyRecoveryLogin(loginKey, userId, "d".repeat(43), r.signature)).toBe(false);
-      expect(verifyRecoveryLogin(loginKey, "00000000-0000-4000-8000-0000000000d2", CHALLENGE, r.signature)).toBe(false);
+      expect(verifyRecoveryLogin(loginKey, "00000000-0000-4000-8000-0000000000ff", CHALLENGE, r.signature)).toBe(false);
       // The Master Key is back on this device.
       expect((await loadDeviceKey(userId))?.keyId).toBe(keyId);
     }
   });
 
   it("one piece alone signs nothing and installs nothing", async () => {
+    const userId = nextUser();
     const { ceremony, keyId, paper } = await setup(userId);
     const server = () => openServerShard(structuredClone(ceremony), userId, SECRET);
     await forgetDeviceKey(userId);
@@ -70,6 +73,7 @@ describe("sign-in by recovery in the crypto enclave", () => {
   });
 
   it("zero-fills the pieces it was handed, on success and on failure", async () => {
+    const userId = nextUser();
     const { ceremony, keyId, paper } = await setup(userId);
     await forgetDeviceKey(userId);
     const prf = prfOf(5);
@@ -87,10 +91,13 @@ describe("sign-in by recovery in the crypto enclave", () => {
     void paper;
   });
 
-  it("refuses a malformed challenge before touching any piece", async () => {
+  it("refuses a malformed challenge before rebuilding anything, and still wipes the pieces", async () => {
+    const userId = nextUser();
     const { ceremony, keyId, paper } = await setup(userId);
     await forgetDeviceKey(userId);
-    expect(await code("ceremony.recoverLogin", { userId, keyId, challenge: "short", ceremony: structuredClone(ceremony), prf: prfOf(5), paperWords: paper })).toBe("invalid_input");
+    const prf = prfOf(5);
+    expect(await code("ceremony.recoverLogin", { userId, keyId, challenge: "short", ceremony: structuredClone(ceremony), prf, paperWords: paper })).toBe("invalid_input");
+    expect(prf.every((b) => b === 0)).toBe(true);
     expect(await loadDeviceKey(userId)).toBeNull();
   });
 });

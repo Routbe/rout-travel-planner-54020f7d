@@ -36,7 +36,7 @@ import { loadRve1Key, rve1SeedAad, saveRve1Key } from "./rve1-key-store";
 import { vaultContext } from "@/lib/vault/vault-context";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { recoveryLoginMessage } from "@/lib/recovery/recovery-login";
+import { CHALLENGE_RE, recoveryLoginMessage } from "@/lib/recovery/recovery-login";
 import {
   RECOVERY_FACTORS,
   RecoveryError,
@@ -565,6 +565,10 @@ export const handlers: Handlers = {
   /** Sign-in by recovery: rebuild, sign the server challenge, install, wipe everything. */
   async "ceremony.recoverLogin"({ userId, ceremony, keyId, prf, paperWords, serverShare, challenge }) {
     const ch = str(challenge, 64);
+    if (!CHALLENGE_RE.test(ch)) {
+      wipeAll(prf, serverShare);
+      fail("invalid_input");
+    }
     return rebuildMaster({ userId, ceremony, keyId, prf, paperWords, serverShare }, async (entropy, owner) => {
       const message = (() => {
         try {
