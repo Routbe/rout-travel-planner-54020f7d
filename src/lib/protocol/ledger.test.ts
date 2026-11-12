@@ -57,6 +57,8 @@ function post(sk: Uint8Array, body: unknown, proof = createDpopProof(sk, "POST",
 }
 const json = async (r: Response) => ({ ...(await r.json()), status: r.status });
 
+const PLAIN_BIO = "plaintext-bio-must-never-be-stored";
+
 describe("blind ledger append", () => {
   it("accepts a signed chain from the controller and a delegated agent, rejecting everything else", async () => {
     const { store, streams } = memoryStore();
@@ -69,7 +71,7 @@ describe("blind ledger append", () => {
     expect(await json(await handleAppend(post(owner.secretKey, { event: g }), store))).toMatchObject({ status: 201, seq: 0 });
 
     // Readable state is refused even from the controller.
-    const plain = signEvent(owner.secretKey, { stream, seq: 1, prev: g.hash, kind: "profile.patch", body: { public: { bio: "hi" } } });
+    const plain = signEvent(owner.secretKey, { stream, seq: 1, prev: g.hash, kind: "profile.patch", body: { public: { bio: PLAIN_BIO } } });
     expect(await json(await handleAppend(post(owner.secretKey, { event: plain }), store))).toMatchObject({ status: 422, error: "event_public_forbidden" });
 
     const e1 = signEvent(owner.secretKey, { stream, seq: 1, prev: g.hash, kind: "profile.patch", body: { sealed: sealed() } });
@@ -109,7 +111,8 @@ describe("blind ledger append", () => {
     const stored = streams.get(stream)!;
     expect(stored.map((e) => e.seq)).toEqual([0, 1, 2, 3, 4]);
     expect(verifyChain(stored)).toEqual({ ok: true });
-    expect(JSON.stringify(stored)).not.toContain("hi");
+    // A long marker: random base64 in signatures/ciphertext can contain any 2-letter string.
+    expect(JSON.stringify(stored)).not.toContain(PLAIN_BIO);
   });
 
   it("only lets the controller or a ledger.read delegate read a stream", async () => {
