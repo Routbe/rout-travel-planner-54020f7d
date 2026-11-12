@@ -26,7 +26,6 @@ vi.mock("@/lib/crypto-enclave/client", async (original) => ({
 }));
 import { RecoveryCeremonyPanel } from "./RecoveryCeremonyPanel";
 
-const shard = "A".repeat(100);
 describe("2-of-3 recovery wizard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -42,7 +41,6 @@ describe("2-of-3 recovery wizard", () => {
     mock.prf.mockImplementation(async (_purpose: string, consume: (o: Uint8Array, c: string) => Promise<unknown>) => consume(new Uint8Array(32), "credential-1"));
     mock.save.mockResolvedValue({ ok: true });
     mock.commit.mockResolvedValue({ keyId: "key-1" });
-    void shard;
   });
   afterEach(cleanup);
 

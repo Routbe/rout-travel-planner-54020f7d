@@ -155,10 +155,10 @@ function Stepper({ step }: { step: Step }) {
       {STEPS.map((s, i) => {
         const state = step === "done" || i < at ? "done" : i === at ? "current" : "todo";
         return (
-          <li key={s.id} aria-current={state === "current" ? "step" : undefined} className="space-y-1">
+          <li key={s.id} aria-current={state === "current" ? "step" : undefined} className="min-w-0 space-y-1">
             <div className={`h-1 rounded-full ${state === "todo" ? "bg-muted" : "bg-primary"}`} />
-            <p className={`flex items-center gap-1 text-xs ${state === "current" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
-              {state === "done" && <Check className="size-3" />} {s.label}
+            <p className={`flex min-w-0 items-center gap-1 text-[11px] sm:text-xs ${state === "current" ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+              {state === "done" && <Check className="size-3 shrink-0" />}<span className="truncate">{s.label}</span>
             </p>
           </li>
         );
