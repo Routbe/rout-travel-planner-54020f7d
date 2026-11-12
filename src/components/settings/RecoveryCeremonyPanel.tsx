@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Check, FileText, Fingerprint, KeyRound, Plus, RotateCcw, Server, ShieldCheck, Trash2 } from "lucide-react";
@@ -13,7 +13,7 @@ import { enclave, EnclaveError } from "@/lib/crypto-enclave/client";
 import { refreshSessionFreshness } from "@/lib/auth/step-up.functions";
 import { addPasskey } from "@/lib/webauthn.functions";
 import { deviceLabelFrom } from "@/lib/passkey-label";
-import { ceremonyFromWire, ceremonyToWire, fromB64, wordAnswersComplete } from "@/lib/recovery/ceremony-wire";
+import { ceremonyFromWire, ceremonyToWire, fromB64, wordCount } from "@/lib/recovery/ceremony-wire";
 import {
   beginCeremonyRestore, deleteRecoveryCeremony, finishCeremonyRestore, getRecoveryCeremonyStatus, getRecoveryServerKey, saveRecoveryCeremony,
 } from "@/lib/recovery/ceremony.functions";
@@ -26,6 +26,15 @@ const STEPS: { id: Exclude<Step, "done">; label: string }[] = [
   { id: "check", label: "Controle" },
   { id: "passkey", label: "Toegangssleutel" },
 ];
+
+/** Reads an uncontrolled field once and empties it, so the words stay out of React and the DOM. */
+function takeInput(el: HTMLInputElement | HTMLTextAreaElement | null | undefined): string {
+  if (!el) return "";
+  const v = el.value.trim();
+  el.value = "";
+  return v;
+}
+const takeValue = (ref: RefObject<HTMLTextAreaElement | null>) => takeInput(ref.current);
 
 function message(e: unknown): string {
   if (e instanceof EnclaveError) {
@@ -44,8 +53,10 @@ function message(e: unknown): string {
 
 /**
  * Herstelkluis 2 van 3: passkey + 24 paper words + ROUT's own piece. Every
- * key operation runs in the crypto enclave worker; this component holds only
- * the paper words while they are on screen, and drops them on confirmation.
+ * key operation runs in the crypto enclave worker. The only words React state
+ * ever holds are the paper words while they are on screen, dropped on
+ * confirmation; typed words live only in uncontrolled inputs, are read once on
+ * submit, handed to the worker and cleared from the field.
  */
 export function RecoveryCeremonyPanel() {
   const { user } = useAuth();
@@ -161,12 +172,15 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
   const serverKey = useServerFn(getRecoveryServerKey);
   const save = useServerFn(saveRecoveryCeremony);
   const [step, setStep] = useState<Step>("start");
-  const [masterWords, setMasterWords] = useState("");
+  // Typed words never enter React state: uncontrolled fields, read once, then cleared.
+  const masterField = useRef<HTMLTextAreaElement>(null);
+  const [masterCount, setMasterCount] = useState(0);
   // The only key material React ever holds: the paper words while they are on screen.
   const [words, setWords] = useState<string[] | null>(null);
   const [written, setWritten] = useState(false);
   const [positions, setPositions] = useState<number[]>([]);
-  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const answerFields = useRef<Record<number, HTMLInputElement | null>>({});
+  const [filled, setFilled] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsPasskey, setNeedsPasskey] = useState(false);
@@ -189,10 +203,10 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
     setBusy(true); setError(null);
     try {
       const { publicKey } = await serverKey();
-      const typed = masterWords.trim();
+      const typed = takeValue(masterField);
+      setMasterCount(0);
       const r = await enclave.ceremony.begin(userId, fromB64(publicKey), hasDeviceKey ? typed : undefined);
       scope.assertCurrent();
-      setMasterWords("");
       handle.current = r.handle;
       setPositions(r.checkPositions);
       setWords(r.paperWords.split(" "));
@@ -211,15 +225,16 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
     const scope = capture();
     setBusy(true); setError(null);
     try {
-      const r = await enclave.ceremony.checkWords(handle.current, positions.map((position) => ({ position, word: answers[position] ?? "" })));
+      const typed = positions.map((position) => ({ position, word: takeInput(answerFields.current[position]) }));
+      setFilled(0);
+      const r = await enclave.ceremony.checkWords(handle.current, typed);
       scope.assertCurrent();
-      if (r.ok) { setAnswers({}); setStep("passkey"); }
+      if (r.ok) setStep("passkey");
       else setError("Niet alle woorden kloppen. Kijk op je papier en probeer opnieuw.");
     } catch (e) {
       if (!scope.isUiCurrent()) return;
       if (e instanceof EnclaveError && e.code === "unknown_handle") {
         handle.current = null;
-        setAnswers({});
         setStep("start");
         setError("Te vaak fout. Om veiligheidsredenen begin je opnieuw met nieuwe woorden. Gooi het vorige papier weg.");
       } else setError(message(e));
@@ -276,7 +291,7 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
             <>
               <p className="text-sm">Typ je huidige 24 herstelwoorden. Zo weten we zeker dat de herstelkluis je echte hoofdsleutel beschermt. Ze blijven in de beveiligde rekenmodule op dit toestel en worden nooit verstuurd.</p>
               <label htmlFor="ceremony-master-words" className="sr-only">Je huidige 24 herstelwoorden</label>
-              <Textarea id="ceremony-master-words" value={masterWords} onChange={(e) => setMasterWords(e.target.value)} rows={3} autoComplete="off" autoCorrect="off" spellCheck={false} className="font-mono" placeholder="woord1 woord2 woord3 …" />
+              <Textarea id="ceremony-master-words" ref={masterField} defaultValue="" onChange={(e) => setMasterCount(wordCount(e.target.value))} rows={3} autoComplete="off" autoCorrect="off" spellCheck={false} className="font-mono" placeholder="woord1 woord2 woord3 …" />
             </>
           ) : (
             <p className="text-sm">Dit toestel heeft nog geen hoofdsleutel. We maken er nu een in de beveiligde rekenmodule en verdelen hem meteen in 3 stukken. Je ziet de hoofdsleutel zelf nooit.</p>
@@ -284,7 +299,7 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
           <p className="text-xs text-muted-foreground">Een vorige herstelkluis werkt niet meer zodra deze klaar is.</p>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button disabled={busy || (hasDeviceKey && masterWords.trim().split(/\s+/).length !== 24)} onClick={() => void begin()}><KeyRound /> Beginnen</Button>
+            <Button disabled={busy || (hasDeviceKey && masterCount !== 24)} onClick={() => void begin()}><KeyRound /> Beginnen</Button>
             <Button variant="ghost" onClick={cancel}>Annuleren</Button>
           </div>
         </div>
@@ -316,13 +331,13 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
             {positions.map((p) => (
               <div key={p} className="space-y-1">
                 <label htmlFor={`ceremony-word-${p}`} className="text-sm font-medium">Woord {p}</label>
-                <Input id={`ceremony-word-${p}`} value={answers[p] ?? ""} onChange={(e) => setAnswers((a) => ({ ...a, [p]: e.target.value }))} autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} className="font-mono" />
+                <Input id={`ceremony-word-${p}`} ref={(el) => { answerFields.current[p] = el; }} defaultValue="" onChange={() => setFilled(positions.filter((q) => (answerFields.current[q]?.value ?? "").trim().length > 0).length)} autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} className="font-mono" />
               </div>
             ))}
           </div>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button type="submit" disabled={busy || !wordAnswersComplete(positions, answers)}><Check /> Controleren</Button>
+            <Button type="submit" disabled={busy || filled !== positions.length}><Check /> Controleren</Button>
             <Button type="button" variant="ghost" onClick={cancel}>Annuleren</Button>
           </div>
         </form>
@@ -357,7 +372,8 @@ function RestoreFlow({ userId, onDone, onCancel }: { userId: string; onDone: () 
   const { capture } = useCryptoLifecycle();
   const begin = useServerFn(beginCeremonyRestore);
   const finish = useServerFn(finishCeremonyRestore);
-  const [paper, setPaper] = useState("");
+  const paperField = useRef<HTMLTextAreaElement>(null);
+  const [paperCount, setPaperCount] = useState(0);
   const [usePaper, setUsePaper] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -376,8 +392,8 @@ function RestoreFlow({ userId, onDone, onCancel }: { userId: string; onDone: () 
       const ceremony = ceremonyFromWire(r.ceremony, userId);
       const serverShare = fromB64(r.serverShare);
       if (withPaper) {
-        const words = paper.trim();
-        setPaper("");
+        const words = takeValue(paperField);
+        setPaperCount(0);
         await enclave.ceremony.restore({ userId, ceremony, keyId: r.ceremony.keyId, paperWords: words, serverShare });
       } else {
         const { withPasskeyPrf } = await import("@/lib/recovery/passkey-prf");
@@ -405,10 +421,10 @@ function RestoreFlow({ userId, onDone, onCancel }: { userId: string; onDone: () 
       ) : (
         <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void restore(true); }}>
           <label htmlFor="ceremony-paper-words" className="text-sm font-medium">Je 24 papieren woorden</label>
-          <Textarea id="ceremony-paper-words" value={paper} onChange={(e) => setPaper(e.target.value)} rows={3} autoComplete="off" autoCorrect="off" spellCheck={false} className="font-mono" placeholder="woord1 woord2 woord3 …" />
+          <Textarea id="ceremony-paper-words" ref={paperField} defaultValue="" onChange={(e) => setPaperCount(wordCount(e.target.value))} rows={3} autoComplete="off" autoCorrect="off" spellCheck={false} className="font-mono" placeholder="woord1 woord2 woord3 …" />
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button type="submit" disabled={busy || paper.trim().split(/\s+/).length !== 24}><RotateCcw /> Terugzetten</Button>
-            <Button type="button" variant="ghost" onClick={() => { setPaper(""); setUsePaper(false); }}>Terug</Button>
+            <Button type="submit" disabled={busy || paperCount !== 24}><RotateCcw /> Terugzetten</Button>
+            <Button type="button" variant="ghost" onClick={() => { takeValue(paperField); setPaperCount(0); setUsePaper(false); }}>Terug</Button>
           </div>
         </form>
       )}
