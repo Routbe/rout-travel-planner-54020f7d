@@ -5,9 +5,10 @@
  * bound to member + ceremony). The ceremony key, not the Master Key, is split
  * with Shamir (shamir-secret-sharing) into three shares, one per factor:
  *
- *   device_prf      key derived from the WebAuthn PRF output of a passkey
- *   nfc_card        key released by the physical ROUT card after a live SUN tap
- *   paper_guardian  key derived from a 24-word BIP39 phrase kept offline
+ *   device_prf       key derived from the WebAuthn PRF output of a passkey
+ *   paper_guardian   key derived from a 24-word BIP39 phrase kept offline
+ *   server_guardian  key derived on the server from ROUT_RECOVERY_FACTOR_SECRET;
+ *                    the server can open only this one shard, never two
  *
  * Each share travels only as an `mpc` RVE1 envelope (pqc-envelope.ts, holder
  * "shard_factor") sealed to its own factor, with a context naming member,
@@ -28,7 +29,7 @@ import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { combine, split } from "shamir-secret-sharing";
 import { generateRecipientKeys, openEnvelope, sealEnvelope, type RecipientKeys } from "./pqc-envelope";
 
-export const RECOVERY_FACTORS = ["device_prf", "nfc_card", "paper_guardian"] as const;
+export const RECOVERY_FACTORS = ["device_prf", "paper_guardian", "server_guardian"] as const;
 export type RecoveryFactor = (typeof RECOVERY_FACTORS)[number];
 export const RECOVERY_THRESHOLD = 2;
 export const RECOVERY_SHARES = 3;
@@ -102,16 +103,24 @@ export function paperFactorKeys(mnemonic: string, memberId: string): RecipientKe
   }
 }
 
-export async function createRecoveryCeremony(input: {
+/** A ceremony whose device shard is not sealed yet; holds no secret. */
+export type CeremonyDraft = Omit<RecoveryCeremony, "shards"> & { shards: Readonly<Record<Exclude<RecoveryFactor, "device_prf">, Uint8Array>> };
+
+/**
+ * First half of a ceremony: seals the Master Key, splits the ceremony key and
+ * seals the paper and server shards. The device share comes back raw (one
+ * share reveals nothing) so it can be sealed once the passkey is available;
+ * the caller must wipe it, normally via completeRecoveryCeremony.
+ */
+export async function beginRecoveryCeremony(input: {
   masterKey: Uint8Array;
   memberId: string;
-  factorPublicKeys: Readonly<Record<RecoveryFactor, Uint8Array>>;
-}): Promise<RecoveryCeremony> {
+  factorPublicKeys: Readonly<Record<Exclude<RecoveryFactor, "device_prf">, Uint8Array>>;
+}): Promise<{ draft: CeremonyDraft; deviceShare: Uint8Array }> {
   const { masterKey, memberId, factorPublicKeys } = input;
   checkMember(memberId);
   if (masterKey.length !== MASTER_KEY_BYTES) throw new TypeError("master_key_must_be_32_bytes");
-  const distinct = new Set(RECOVERY_FACTORS.map((f) => hex(factorPublicKeys[f])));
-  if (distinct.size !== RECOVERY_SHARES) throw new TypeError("factor_keys_must_differ");
+  if (hex(factorPublicKeys.paper_guardian) === hex(factorPublicKeys.server_guardian)) throw new TypeError("factor_keys_must_differ");
 
   const ceremonyKey = randomBytes(32);
   const ceremonyId = hex(randomBytes(CEREMONY_ID_BYTES));
@@ -124,21 +133,64 @@ export async function createRecoveryCeremony(input: {
     sealedMaster.set(body, NONCE_BYTES);
 
     shares = await split(ceremonyKey, RECOVERY_SHARES, RECOVERY_THRESHOLD);
-    const shards = {} as Record<RecoveryFactor, Uint8Array>;
-    RECOVERY_FACTORS.forEach((factor, i) => {
-      const share = shares[i];
+    const seal = (factor: Exclude<RecoveryFactor, "device_prf">, share: Uint8Array | undefined) => {
       if (!share) throw new Error("split_failed");
-      shards[factor] = sealEnvelope({
-        kind: "mpc",
-        holder: "shard_factor",
-        recipientPublicKey: factorPublicKeys[factor],
-        plaintext: share,
-        context: shardContext(memberId, ceremonyId, factor),
-      });
-    });
-    return { version: 1, ceremonyId, memberId, threshold: RECOVERY_THRESHOLD, sealedMaster, shards: Object.freeze(shards) };
+      return sealEnvelope({ kind: "mpc", holder: "shard_factor", recipientPublicKey: factorPublicKeys[factor], plaintext: share, context: shardContext(memberId, ceremonyId, factor) });
+    };
+    const deviceShare = shares[0];
+    if (!deviceShare) throw new Error("split_failed");
+    const shards = Object.freeze({ paper_guardian: seal("paper_guardian", shares[1]), server_guardian: seal("server_guardian", shares[2]) });
+    shares = shares.slice(1); // the device share is the caller's now; the rest is wiped below
+    return { draft: { version: 1, ceremonyId, memberId, threshold: RECOVERY_THRESHOLD, sealedMaster, shards }, deviceShare };
   } finally {
     wipe(ceremonyKey, ...shares);
+  }
+}
+
+/** Second half: seals the device share to the passkey factor and wipes it. */
+export function completeRecoveryCeremony(draft: CeremonyDraft, deviceShare: Uint8Array, devicePublicKey: Uint8Array): RecoveryCeremony {
+  try {
+    const keys = new Set([hex(devicePublicKey), hex(draft.shards.paper_guardian.subarray(0, 0)), ""]);
+    void keys;
+    const device_prf = sealEnvelope({
+      kind: "mpc",
+      holder: "shard_factor",
+      recipientPublicKey: devicePublicKey,
+      plaintext: deviceShare,
+      context: shardContext(draft.memberId, draft.ceremonyId, "device_prf"),
+    });
+    return { ...draft, shards: Object.freeze({ device_prf, ...draft.shards }) };
+  } finally {
+    wipe(deviceShare);
+  }
+}
+
+/** Both halves at once (all three factor public keys known up front). */
+export async function createRecoveryCeremony(input: {
+  masterKey: Uint8Array;
+  memberId: string;
+  factorPublicKeys: Readonly<Record<RecoveryFactor, Uint8Array>>;
+}): Promise<RecoveryCeremony> {
+  const { factorPublicKeys } = input;
+  const distinct = new Set(RECOVERY_FACTORS.map((f) => hex(factorPublicKeys[f])));
+  if (distinct.size !== RECOVERY_SHARES) throw new TypeError("factor_keys_must_differ");
+  const { draft, deviceShare } = await beginRecoveryCeremony({
+    masterKey: input.masterKey,
+    memberId: input.memberId,
+    factorPublicKeys: { paper_guardian: factorPublicKeys.paper_guardian, server_guardian: factorPublicKeys.server_guardian },
+  });
+  return completeRecoveryCeremony(draft, deviceShare, factorPublicKeys.device_prf);
+}
+
+/** Opens one factor's shard; the server uses this for its own factor only. Caller wipes the share. */
+export function openFactorShard(ceremony: RecoveryCeremony, memberId: string, factor: RecoveryFactor, secretKey: Uint8Array): Uint8Array {
+  try {
+    if (ceremony.version !== 1 || ceremony.memberId !== memberId || !/^[0-9a-f]{32}$/.test(ceremony.ceremonyId)) throw new RecoveryError();
+    const envelope = ceremony.shards[factor];
+    if (!envelope) throw new RecoveryError();
+    return openEnvelope({ envelope, expectedKind: "mpc", holder: "shard_factor", secretKey, context: shardContext(memberId, ceremony.ceremonyId, factor) });
+  } catch {
+    throw new RecoveryError();
   }
 }
 
@@ -147,14 +199,25 @@ export async function recoverMasterKey(input: {
   ceremony: RecoveryCeremony;
   memberId: string;
   factorSecretKeys: Partial<Record<RecoveryFactor, Uint8Array>>;
+  /** Shares already opened by their holder (the server's own factor). Wiped here. */
+  openedShares?: Partial<Record<RecoveryFactor, Uint8Array>>;
 }): Promise<Uint8Array> {
   const { ceremony, memberId, factorSecretKeys } = input;
-  const present = RECOVERY_FACTORS.filter((f) => factorSecretKeys[f] !== undefined);
-  if (present.length < RECOVERY_THRESHOLD) throw new RecoveryError();
+  const opened = input.openedShares ?? {};
+  const present = RECOVERY_FACTORS.filter((f) => factorSecretKeys[f] !== undefined && opened[f] === undefined);
+  const openedFactors = RECOVERY_FACTORS.filter((f) => opened[f] !== undefined);
+  if (present.length + openedFactors.length < RECOVERY_THRESHOLD) {
+    wipe(...openedFactors.map((f) => opened[f]));
+    throw new RecoveryError();
+  }
   const shares: Uint8Array[] = [];
   let ceremonyKey: Uint8Array | undefined;
   try {
     if (ceremony.version !== 1 || ceremony.memberId !== memberId || !/^[0-9a-f]{32}$/.test(ceremony.ceremonyId)) throw new RecoveryError();
+    for (const factor of openedFactors) {
+      const share = opened[factor];
+      if (share) shares.push(share);
+    }
     for (const factor of present) {
       const secretKey = factorSecretKeys[factor];
       const envelope = ceremony.shards[factor];
