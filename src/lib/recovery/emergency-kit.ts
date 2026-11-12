@@ -1,6 +1,6 @@
 /**
- * Emergency Kit PDF, drawn 100% in the browser with jsPDF (+ qr-code-styling for
- * the phrase QR). Nothing is uploaded; the caller hands the Blob to a download.
+ * Emergency Kit PDF for one-time sign-in recovery codes, drawn 100% in the
+ * browser with jsPDF. Nothing is uploaded; the caller hands the Blob to a download.
  * Browser-only: import dynamically from an event handler.
  */
 export type KitInput = {
