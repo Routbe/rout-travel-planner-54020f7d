@@ -27,7 +27,7 @@ import { randomBytes } from "@noble/hashes/utils.js";
 import { entropyToMnemonic, mnemonicToEntropy, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { combine, split } from "shamir-secret-sharing";
-import { generateRecipientKeys, openEnvelope, sealEnvelope, type RecipientKeys } from "./pqc-envelope";
+import { envelopeKeyId, generateRecipientKeys, keyId, openEnvelope, sealEnvelope, type RecipientKeys } from "./pqc-envelope";
 
 export const RECOVERY_FACTORS = ["device_prf", "paper_guardian", "server_guardian"] as const;
 export type RecoveryFactor = (typeof RECOVERY_FACTORS)[number];
@@ -150,8 +150,10 @@ export async function beginRecoveryCeremony(input: {
 /** Second half: seals the device share to the passkey factor and wipes it. */
 export function completeRecoveryCeremony(draft: CeremonyDraft, deviceShare: Uint8Array, devicePublicKey: Uint8Array): RecoveryCeremony {
   try {
-    const keys = new Set([hex(devicePublicKey), hex(draft.shards.paper_guardian.subarray(0, 0)), ""]);
-    void keys;
+    const device = hex(keyId(devicePublicKey));
+    if (device === hex(envelopeKeyId(draft.shards.paper_guardian)) || device === hex(envelopeKeyId(draft.shards.server_guardian))) {
+      throw new TypeError("factor_keys_must_differ");
+    }
     const device_prf = sealEnvelope({
       kind: "mpc",
       holder: "shard_factor",
