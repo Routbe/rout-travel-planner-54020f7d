@@ -10,7 +10,7 @@ import type { SealedBlob } from "@/lib/e2ee/crypto";
 import type { PrivateEnvelope } from "@/lib/ledger/crypto";
 import type { Capability, CapabilityGrant } from "@/lib/protocol/capabilities";
 import type { EventDraft, SignedEvent } from "@/lib/protocol/events";
-import type { RecoveryVault, ShardCheck } from "@/lib/recovery/vault";
+import type { RecoveryCeremony } from "./recovery-mpc";
 import type { SubjectClaim } from "@/lib/recovery/pairwise";
 
 /** Public metadata of a decrypted handoff; the full config stays inside the worker. */
@@ -46,13 +46,27 @@ export interface EnclaveOps {
   "ledger.decrypt": { req: { keyId: string; items: { id: string; payload: string }[] }; res: Record<string, string> };
   "ledger.lock": { req: { keyId?: string }; res: null };
 
-  /** Split a fresh vault key 3-of-5; the Master Key (from its words) is sealed under it and wiped. */
-  "recovery.create": { req: { mnemonic: string }; res: { vault: RecoveryVault; shards: string[] } };
-  "recovery.check": { req: { vault: RecoveryVault; shard: string }; res: ShardCheck };
-  /** Reconstruct and install as this device's key; `practice` verifies without installing. */
-  "recovery.restore": { req: { userId: string; vault: RecoveryVault; shards: string[]; practice?: boolean }; res: { keyId: string | null } };
-  "recovery.sealShard": { req: { prf: Uint8Array; shard: string; vaultId: string }; res: { blob: string } };
-  "recovery.openShard": { req: { prf: Uint8Array; blob: string; vaultId: string }; res: { shard: string } };
+  /**
+   * 2-of-3 recovery ceremony (passkey + 24 paper words + ROUT's server piece).
+   * The Master Key comes from the typed words, or is generated fresh for a
+   * device without one; it is wiped inside `begin`. Only the paper words come
+   * back, once, for display; the member retypes three of them before the
+   * passkey seals the last shard.
+   */
+  "ceremony.begin": {
+    req: { userId: string; serverFactorKey: Uint8Array; mnemonic?: string };
+    res: { handle: string; paperWords: string; checkPositions: number[]; keyId: string; fresh: boolean };
+  };
+  "ceremony.checkWords": { req: { handle: string; answers: { position: number; word: string }[] }; res: { ok: boolean } };
+  "ceremony.sealDevice": { req: { handle: string; prf: Uint8Array }; res: { ceremony: RecoveryCeremony; keyId: string } };
+  /** After the server stored the ceremony: installs a freshly made Master Key on this device. */
+  "ceremony.commit": { req: { handle: string; userId: string }; res: { keyId: string } };
+  "ceremony.discard": { req: { handle: string }; res: null };
+  /** Any two of passkey PRF, paper words and the server's opened share rebuild and install the key. */
+  "ceremony.restore": {
+    req: { userId: string; ceremony: RecoveryCeremony; keyId: string; prf?: Uint8Array; paperWords?: string; serverShare?: Uint8Array };
+    res: { keyId: string };
+  };
   /** Pairwise partner subject from a passkey PRF root (transferred, wiped). */
   "pairwise.claim": { req: { root: Uint8Array; sector: string; nonce: string }; res: SubjectClaim };
 
@@ -104,6 +118,8 @@ export type EnclaveErrorCode =
   | "decrypt_failed"
   | "invalid_config"
   | "invalid_mnemonic"
+  | "master_key_required"
+  | "key_mismatch"
   | "no_device_key"
   | "internal";
 
