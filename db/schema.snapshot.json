@@ -2856,14 +2856,7 @@
           "check": "true"
         }
       ],
-      "grants": {
-        "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
-        ]
-      }
+      "grants": {}
     },
     {
       "schema": "public",
@@ -2955,26 +2948,8 @@
       "triggers": [],
       "rls": true,
       "forceRls": false,
-      "policies": [
-        {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
-        }
-      ],
-      "grants": {
-        "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
-        ]
-      }
+      "policies": [],
+      "grants": {}
     },
     {
       "schema": "public",
@@ -4237,14 +4212,7 @@
           "check": "true"
         }
       ],
-      "grants": {
-        "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
-        ]
-      }
+      "grants": {}
     },
     {
       "schema": "public",
@@ -5805,10 +5773,7 @@
       ],
       "grants": {
         "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
+          "SELECT"
         ]
       }
     },
@@ -7232,24 +7197,11 @@
           "cmd": "SELECT",
           "using": "( SELECT rout_caller_is_admin() AS rout_caller_is_admin)",
           "check": null
-        },
-        {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
         }
       ],
       "grants": {
         "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
+          "SELECT"
         ]
       }
     },
@@ -9065,14 +9017,7 @@
           "check": "true"
         }
       ],
-      "grants": {
-        "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
-        ]
-      }
+      "grants": {}
     },
     {
       "schema": "public",
@@ -10960,24 +10905,11 @@
           "cmd": "SELECT",
           "using": "(lower(handle) = ( SELECT rout_current_username() AS rout_current_username))",
           "check": null
-        },
-        {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
         }
       ],
       "grants": {
         "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
+          "SELECT"
         ]
       }
     },
@@ -11119,9 +11051,7 @@
       "grants": {
         "rout_app": [
           "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
+          "SELECT"
         ]
       }
     },
@@ -14134,26 +14064,8 @@
       "triggers": [],
       "rls": true,
       "forceRls": false,
-      "policies": [
-        {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
-        }
-      ],
-      "grants": {
-        "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
-        ]
-      }
+      "policies": [],
+      "grants": {}
     },
     {
       "schema": "public",
@@ -14916,26 +14828,9 @@
           "cmd": "SELECT",
           "using": "true",
           "check": null
-        },
-        {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
         }
       ],
-      "grants": {
-        "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
-        ]
-      }
+      "grants": {}
     },
     {
       "schema": "public",
@@ -15005,26 +14900,8 @@
       "triggers": [],
       "rls": true,
       "forceRls": false,
-      "policies": [
-        {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
-        }
-      ],
-      "grants": {
-        "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
-        ]
-      }
+      "policies": [],
+      "grants": {}
     },
     {
       "schema": "public",
@@ -15993,24 +15870,11 @@
           "cmd": "SELECT",
           "using": "(profile_user_id = ( SELECT rout_current_user_id() AS rout_current_user_id))",
           "check": null
-        },
-        {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
         }
       ],
       "grants": {
         "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
+          "SELECT"
         ]
       }
     },
@@ -18447,24 +18311,12 @@
           "cmd": "SELECT",
           "using": "(( SELECT rout_caller_is_admin() AS rout_caller_is_admin) OR (tracked_qr_id IN ( SELECT rout_accessible_tracked_qr_ids() AS rout_accessible_tracked_qr_ids)))",
           "check": null
-        },
-        {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
         }
       ],
       "grants": {
         "rout_app": [
           "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
+          "SELECT"
         ]
       }
     },
@@ -20476,16 +20328,6 @@
       "forceRls": false,
       "policies": [
         {
-          "name": "rout_server",
-          "permissive": true,
-          "roles": [
-            "rout_app"
-          ],
-          "cmd": "ALL",
-          "using": "true",
-          "check": "true"
-        },
-        {
           "name": "showcase_profiles_public_read",
           "permissive": true,
           "roles": [
@@ -20498,10 +20340,7 @@
       ],
       "grants": {
         "rout_app": [
-          "DELETE",
-          "INSERT",
-          "SELECT",
-          "UPDATE"
+          "SELECT"
         ]
       }
     },

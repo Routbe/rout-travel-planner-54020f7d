@@ -14,6 +14,7 @@ import { EXPLICIT_ACCOUNT_LINKING } from "@/lib/identity/link-rules";
 import { AUTH_COOKIE_ATTRIBUTES, configuredAuthOrigin , chooseAuthBaseUrl } from "@/lib/auth-origin";
 import { logServerError } from "@/lib/security/safe-errors";
 import { fediverseSession } from "@/lib/auth/fediverse-session";
+import { fetchNativeUserInfo, nativeOidcEndpoints } from "@/lib/oauth/native-endpoints";
 
 /**
  * Self-hosted Better Auth — ROUT's own identity layer (System A).
@@ -200,16 +201,22 @@ export function createRoutAuth(request?: Request) {
   if (oidc && discoveryUrl) {
     genericConfigs.push({ providerId: "oidc", discoveryUrl, ...oidc, scopes: ["openid", "email", "profile"], pkce: true, disableSignUp: true });
   } else if (!oidc && !discoveryUrl) {
-    // Discover on the live (approved) request host so dev/preview never call a dead port.
-    const live = requestOrigin(request);
-    const issuerBase = baseUrlFor(request);
+    // Our own issuer: endpoints come from the same source as the discovery
+    // document, so sign-in never fetches its own discovery over HTTP (which
+    // failed on cold or protected hosts and skipped the provider).
+    const ep = nativeOidcEndpoints();
     genericConfigs.push({
       providerId: "oidc",
       disableSignUp: true,
-      discoveryUrl: `${issuerBase}/.well-known/openid-configuration`,
       clientId: NATIVE_OIDC_CLIENT_ID,
+      authorizationUrl: ep.authorizationUrl,
+      tokenUrl: ep.tokenUrl,
+      userInfoUrl: ep.userInfoUrl,
+      endSessionEndpoint: ep.endSessionUrl,
       scopes: ["openid", "email", "profile"],
       pkce: true,
+      // Identity only from userinfo with the access token; `sub` stays the account subject.
+      getUserInfo: (tokens: { accessToken?: string }) => fetchNativeUserInfo(ep.userInfoUrl, tokens.accessToken),
     });
   }
 

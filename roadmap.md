@@ -1,21 +1,11 @@
-# ROUT roadmap
+# Roadmap
 
-- [x] Import repository 1:1 (3,094 files verified)
-- [x] Neon owner connection (agent-only) + DATABASE_URL (rout_app) verified
-- [x] BETTER_AUTH_SECRET stored
-- [x] Batch 3 expand — db/0228_oauth_rpc.sql live on Neon + code uses it (tests: oauth-rpc, purge-read-repair)
-- [ ] Batch 3 contract — db-pending/0230_oauth_lockdown.sql: approved; apply as soon as Vercel runs the current commit
-- [x] Legacy plaintext signing key sealed (new sealed key active; old key retired, private part wiped, still published for the grace period)
-- [x] Batch 4 expand — db/0229_payments_and_promos_rpc.sql live on Neon (source hash verified, live flows tested as rout_app with rollback) + code uses it (tests: payments-rpc)
-- [ ] Batch 4 contract — db-pending/0231_payments_lockdown.sql: approved; apply as soon as Vercel runs the current commit
-- [x] Inventory remaining rout_server tables (49 total: 12 covered by 0230/0231, 37 still open)
-- [x] Batch 5 expand — db/0232 live on Neon (source hash verified, live flows tested as rout_app with rollback) + code uses it (tests: abuse-rpc)
-- [ ] Batch 5 contract — db-pending/0233_abuse_lockdown.sql, with 0230/0231 once production health reports schema >= 0232 — altcha_used, signin_throttle, rate_limits, upload_rate_limits, login_codes, fediverse_email_otp, telegram_verify_sessions, mastodon_app_registrations
-- [x] Batch 6 expand — db/0234 live on Neon (source hash verified, live flows tested as rout_app with rollback) + code uses it (tests: security-logs-rpc)
-- [ ] Batch 6 contract — db-pending/0235_security_logs_lockdown.sql once production health reports schema >= 0234 — security_audit_logs, security_events, webhook_events, webhook_deliveries, sepa_review_queue
-- [x] Batch 7 expand — db/0236 live on Neon (source hash verified, live flows tested as rout_app with rollback; early-verified trigger made SECURITY DEFINER) + code uses it (tests: identity-entitlements-rpc)
-- [ ] Batch 7 contract — db-pending/0237_identity_entitlements_lockdown.sql once production health reports schema >= 0236 — credential_issue_requests, credential_issuer_blocks, identity_labels, account_merge_tickets, api_keys, reserved_handles, badges, entitlement_overrides, referrals, didit_monthly_usage
-- [ ] Batch 8 — public profile & analytics: links, profile_link_clicks, qr_scans, poll_votes, showcase_profiles, lead_captures, contact_submissions, onboarding_drafts
-- [ ] Batch 9 — agenda, jobs & caches: availability_jobs, booking_requests, alias_sync_jobs, forwarding_confirmation_sends, ambient_weather_cache, platform_integration_switches
-- [ ] Investigate migration drift: 0209/91 checksum differ, 95_question_stories + 0169_workspace_icon renamed
-- [ ] Blocked: recovery ceremony (2-of-3) until all rout_server policies are gone
+- [x] Import GitHub repo 1:1 and verify pages
+- [x] Owner Neon connection (agent only) + DATABASE_URL (rout_app)
+- [x] Step 1: rout.be health reports schema 0241
+- [ ] Verify recorded checksums of 0238–0241 in schema_migrations
+- [ ] Step 2a: regenerate db/schema.snapshot.json (replay) and check against live
+- [ ] Step 2b: run full test suite, fix failures
+- [ ] Runtime secrets for sign-in (BETTER_AUTH_SECRET, PUBLIC_ORIGIN, vault/KEK keys matching production)
+- [ ] Step 4: Better Auth "oidc" provider skipped warning without OIDC_* vars
+- [ ] Step 3: recovery ceremony — use real master key from crypto enclave, setup wizard UI, recovery flow

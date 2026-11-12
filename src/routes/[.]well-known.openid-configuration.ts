@@ -7,14 +7,16 @@ export const Route = createFileRoute("/.well-known/openid-configuration")({
       GET: async () => {
         const { issuer, SUPPORTED_SCOPES } = await import("@/lib/oauth/provider.server");
         const { CLAIMS_SUPPORTED } = await import("@/lib/oauth/integration-templates");
+        const { nativeOidcEndpoints } = await import("@/lib/oauth/native-endpoints");
         const iss = issuer();
+        const ep = nativeOidcEndpoints(iss);
         return Response.json(
           {
             issuer: iss,
-            authorization_endpoint: `${iss}/oauth/authorize`,
-            token_endpoint: `${iss}/api/public/oauth/token`,
-            jwks_uri: `${iss}/.well-known/jwks.json`,
-            userinfo_endpoint: `${iss}/api/public/oauth/userinfo`,
+            authorization_endpoint: ep.authorizationUrl,
+            token_endpoint: ep.tokenUrl,
+            jwks_uri: ep.jwksUrl,
+            userinfo_endpoint: ep.userInfoUrl,
             response_types_supported: ["code"],
             response_modes_supported: ["query"],
             claims_parameter_supported: false,
@@ -24,7 +26,7 @@ export const Route = createFileRoute("/.well-known/openid-configuration")({
             subject_types_supported: ["public", "pairwise"],
             revocation_endpoint: `${iss}/api/public/oauth/revoke`,
             introspection_endpoint: `${iss}/api/public/oauth/introspect`,
-            end_session_endpoint: `${iss}/oauth/end-session`,
+            end_session_endpoint: ep.endSessionUrl,
             authorization_response_iss_parameter_supported: true,
             prompt_values_supported: ["none", "login", "consent"],
             acr_values_supported: ["urn:rout:acr:passkey"],
