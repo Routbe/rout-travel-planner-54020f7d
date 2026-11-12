@@ -100,6 +100,9 @@ function Overview({ state, deviceKey, onSetup, onRestore, onChanged }: {
         <ShieldCheck className="mt-0.5 size-4 shrink-0" />
         <span>Actief sinds {since}. {onThisDevice ? "Dit toestel gebruikt deze hoofdsleutel." : "Je hoofdsleutel staat nog niet op dit toestel. Zet hem terug met 2 van je 3 stukken."}</span>
       </p>
+      {!state.ceremony.canSignIn && (
+        <p className="text-sm text-muted-foreground">Deze kluis is gemaakt vóór inloggen met herstel bestond. Stel hem opnieuw in, dan kun je er ook mee inloggen als je buitengesloten bent.</p>
+      )}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         {!onThisDevice && <Button onClick={onRestore}><RotateCcw /> Hoofdsleutel terugzetten</Button>}
         <Button variant="soft" onClick={onSetup}><KeyRound /> Opnieuw instellen</Button>

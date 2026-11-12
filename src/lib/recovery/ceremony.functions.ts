@@ -41,7 +41,10 @@ export const getRecoveryCeremonyStatus = createServerFn({ method: "GET" })
     const { sql } = await import("@/lib/neon");
     const rows = (await sql`select * from public.rout_recovery_ceremony_status()`) as { ceremony_id: string; key_id: string; created_at: string }[];
     const r = rows[0];
-    return { ceremony: r ? { ceremonyId: r.ceremony_id, keyId: r.key_id, createdAt: String(r.created_at) } : null };
+    const login = r ? ((await sql`select public.rout_recovery_ceremony_login_key() is not null as ok`) as { ok: boolean }[]) : [];
+    return {
+      ceremony: r ? { ceremonyId: r.ceremony_id, keyId: r.key_id, createdAt: String(r.created_at), canSignIn: login[0]?.ok === true } : null,
+    };
   });
 
 /** Public key of ROUT's factor for this member; the browser seals one shard to it. */
