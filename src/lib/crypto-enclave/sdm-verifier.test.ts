@@ -114,7 +114,7 @@ describe("AN10922 key diversification and card lookup", () => {
     expect(hex(uidIndex(new Uint8Array(32).fill(2), uid))).not.toBe(hex(i1));
   });
 
-  it("compares bytes without early exit semantics leaking into results", () => {
+  it("compares bytes in constant time", () => {
     expect(constantTimeEqual(h("0102"), h("0102"))).toBe(true);
     expect(constantTimeEqual(h("0102"), h("0103"))).toBe(false);
     expect(constantTimeEqual(h("01"), h("0102"))).toBe(false);
