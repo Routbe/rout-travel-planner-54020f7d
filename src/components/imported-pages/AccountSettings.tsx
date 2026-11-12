@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PasskeysPanel } from "@/components/settings/PasskeysPanel";
-import { RecoveryVaultPanel } from "@/components/settings/RecoveryVaultPanel";
+import { RecoveryCeremonyPanel } from "@/components/settings/RecoveryCeremonyPanel";
 import { ConnectedAppsPanel } from "@/components/settings/ConnectedAppsPanel";
 import { RecoveryCodes } from "@/components/settings/RecoveryCodes";
 import { HardwareKeyPanel } from "@/components/settings/HardwareKeyPanel";
@@ -491,7 +491,7 @@ export default function AccountSettings() {
           </section>
 
           <PasskeysPanel />
-          <RecoveryVaultPanel />
+          <RecoveryCeremonyPanel />
           <ConnectedAppsPanel />
 
           <ConnectedAccounts />
