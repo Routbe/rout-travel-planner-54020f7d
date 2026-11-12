@@ -7,7 +7,7 @@ import type { EnclaveArgs, EnclaveErrorCode, EnclaveOp, EnclaveRequest, EnclaveR
 import type { PrivateEnvelope } from "@/lib/ledger/crypto";
 import type { Capability, CapabilityGrant } from "@/lib/protocol/capabilities";
 import type { EventDraft, SignedEvent } from "@/lib/protocol/events";
-import type { RecoveryVault } from "@/lib/recovery/vault";
+import type { RecoveryCeremony } from "./recovery-mpc";
 import { wipeMessage } from "@/lib/crypto/wipe";
 
 export type { LedgerDraft, SealedForUser, VaultSummary } from "./protocol";
@@ -137,7 +137,7 @@ export function callEnclave<K extends EnclaveOp>(op: K, args: EnclaveArgs<K>, tr
   });
 }
 
-const moved = (b?: Uint8Array): Transferable[] => (b ? [b.buffer as ArrayBuffer] : []);
+const moved = (...list: (Uint8Array | undefined)[]): Transferable[] => list.filter((b): b is Uint8Array => !!b).map((b) => b.buffer as ArrayBuffer);
 
 /** Typed façade. Uint8Array arguments are transferred: the caller's copy becomes empty. */
 export const enclave = {
@@ -181,12 +181,16 @@ export const enclave = {
     decrypt: (keyId: string, items: { id: string; payload: string }[]) => callEnclave("ledger.decrypt", { keyId, items }),
     lock: (keyId?: string) => callEnclave("ledger.lock", keyId ? { keyId } : {}),
   },
-  recovery: {
-    create: (mnemonic: string) => callEnclave("recovery.create", { mnemonic }),
-    check: (vault: RecoveryVault, shard: string) => callEnclave("recovery.check", { vault, shard }),
-    sealShard: (prf: Uint8Array, shard: string, vaultId: string) => callEnclave("recovery.sealShard", { prf, shard, vaultId }, moved(prf)),
-    openShard: (prf: Uint8Array, blob: string, vaultId: string) => callEnclave("recovery.openShard", { prf, blob, vaultId }, moved(prf)),
-    restore: (userId: string, vault: RecoveryVault, shards: string[], practice = false) => callEnclave("recovery.restore", { userId, vault, shards, practice }),
+  ceremony: {
+    /** Starts a 2-of-3 ceremony; `mnemonic` is the existing Master Key's words when this device has a key. */
+    begin: (userId: string, serverFactorKey: Uint8Array, mnemonic?: string) =>
+      callEnclave("ceremony.begin", mnemonic === undefined ? { userId, serverFactorKey } : { userId, serverFactorKey, mnemonic }, moved(serverFactorKey)),
+    checkWords: (handle: string, answers: { position: number; word: string }[]) => callEnclave("ceremony.checkWords", { handle, answers }),
+    sealDevice: (handle: string, prf: Uint8Array) => callEnclave("ceremony.sealDevice", { handle, prf }, moved(prf)),
+    commit: (handle: string, userId: string) => callEnclave("ceremony.commit", { handle, userId }),
+    discard: (handle: string) => callEnclave("ceremony.discard", { handle }),
+    restore: (input: { userId: string; ceremony: RecoveryCeremony; keyId: string; prf?: Uint8Array; paperWords?: string; serverShare?: Uint8Array }) =>
+      callEnclave("ceremony.restore", input, moved(input.prf, input.serverShare)),
   },
   pairwise: {
     claim: (root: Uint8Array, sector: string, nonce: string) => callEnclave("pairwise.claim", { root, sector, nonce }, moved(root)),

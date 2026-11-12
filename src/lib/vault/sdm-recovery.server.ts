@@ -1,5 +1,6 @@
 /**
- * NFC card recovery gate (db/0224): the "nfc_card" factor of 2-of-3 recovery.
+ * NFC card recovery gate (db/0224): a card factor for recovery. Not part of the
+ * current 2-of-3 ceremony (passkey + paper + server, recovery-mpc.ts).
  *
  * Works without a session or passkey: the card id comes from the card's own
  * tap URL, and only a live NTAG 424 DNA SUN tap opens the gate.
@@ -12,9 +13,8 @@
  *   3. vault_enclave.confirm_sdm_recovery — binds the verdict to the same tap
  *      bytes, within 60 s, with a strictly higher read counter (replay-proof).
  *
- * Only then is the card factor secret released to the caller. It is the input
- * for factorKeys("nfc_card", …) in recovery-mpc.ts: one of three shards, never
- * enough alone. Every failure is the same VaultDeniedError; reasons stay in the
+ * Only then is the card factor secret released to the caller: a 32-byte
+ * factor secret, never enough alone. Every failure is the same VaultDeniedError; reasons stay in the
  * enclave's audit chain.
  */
 import { z } from "zod";

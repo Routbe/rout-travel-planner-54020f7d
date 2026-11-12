@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveDek, isSealedBlob, open, seal } from "./crypto";
-import { combineShards, masterKeyFromMnemonic, newMasterKey, splitSecret } from "./recovery";
+import { masterKeyFromMnemonic, newMasterKey } from "./recovery";
 import { didJwk, didWeb, didWebDocument, newSigningKeyPair, publicJwk, signPayload, verifyPayload } from "./did";
 
 describe("e2ee", () => {
@@ -17,14 +17,6 @@ describe("e2ee", () => {
     const { key, mnemonic } = newMasterKey();
     expect(mnemonic.split(" ")).toHaveLength(24);
     expect(masterKeyFromMnemonic(mnemonic)).toEqual(key);
-  });
-
-  it("any 2 of 3 shards reconstruct, 1 does not", () => {
-    const { key } = newMasterKey();
-    const [a, b, c] = splitSecret(key, 3, 2);
-    expect(combineShards([a, b])).toEqual(key);
-    expect(combineShards([c, a])).toEqual(key);
-    expect(combineShards([b])).not.toEqual(key);
   });
 
   it("did:web doc embeds did:jwk key; signatures verify only against did:jwk", async () => {

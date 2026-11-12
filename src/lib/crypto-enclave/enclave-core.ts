@@ -14,7 +14,6 @@ import { loadDeviceKey, saveDeviceKey, workspaceKeyFromMaster, type WorkspaceKey
 import { decryptLedgerEvent, generateLedgerKeys, unlockLedgerKey } from "@/lib/ledger/crypto";
 import { wipe, wipeMessage } from "@/lib/crypto/wipe";
 import { BHM_MAX_HASHES, bhmPreimage, isBhmKind } from "@/lib/oauth/blind-hash";
-import { checkShard, createVault, openShardWithPrf, openVault, sealShardWithPrf } from "@/lib/recovery/vault";
 import { claimSubject } from "@/lib/recovery/pairwise";
 import {
   VAULT_TTL_MINUTES,
@@ -35,6 +34,19 @@ import type { EnclaveErrorCode, EnclaveOp, EnclaveOps } from "./protocol";
 import { ENVELOPE_MAX_BYTES, ENVELOPE_MAX_PLAINTEXT, generateRecipientKeys, keyId, openEnvelope, PUBLIC_KEY_BYTES, publicKeyOf, sealEnvelope } from "./pqc-envelope";
 import { loadRve1Key, rve1SeedAad, saveRve1Key } from "./rve1-key-store";
 import { vaultContext } from "@/lib/vault/vault-context";
+import { sha256 } from "@noble/hashes/sha2.js";
+import {
+  RECOVERY_FACTORS,
+  RecoveryError,
+  beginRecoveryCeremony,
+  completeRecoveryCeremony,
+  createPaperFactor,
+  factorKeys,
+  paperFactorKeys,
+  recoverMasterKey,
+  type CeremonyDraft,
+  type RecoveryCeremony,
+} from "./recovery-mpc";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -65,6 +77,85 @@ const vaults = new Map<string, VaultSlot>();
 const pendingMasters = new Map<string, { value: WorkspaceKey; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
 const pendingLedger = new Map<string, { key: CryptoKey; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
 const ledgerKeys = new Map<string, CryptoKey>();
+
+/**
+ * A 2-of-3 ceremony in progress. Holds the raw device share (one share reveals
+ * nothing) until the passkey seals it, a non-extractable key to install when
+ * this device had none, and only hashes of the words the member must retype.
+ */
+type CeremonySlot = {
+  userId: string;
+  keyId: string;
+  draft: CeremonyDraft;
+  deviceShare: Uint8Array | null;
+  install: WorkspaceKey | null;
+  checks: { position: number; hash: string }[];
+  attempts: number;
+  checked: boolean;
+  sealed: boolean;
+  expiresAt: number;
+  timer: ReturnType<typeof setTimeout>;
+};
+const ceremonies = new Map<string, CeremonySlot>();
+const CEREMONY_CHECKS = 3;
+const CEREMONY_MAX_ATTEMPTS = 5;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function discardCeremony(handle: string) {
+  const c = ceremonies.get(handle);
+  if (!c) return;
+  clearTimeout(c.timer);
+  wipe(c.deviceShare);
+  c.deviceShare = null;
+  c.install = null;
+  ceremonies.delete(handle);
+}
+
+function liveCeremony(handle: unknown): CeremonySlot {
+  const h = str(handle, 64);
+  const c = ceremonies.get(h) ?? fail("unknown_handle");
+  if (c.expiresAt <= Date.now()) {
+    discardCeremony(h);
+    fail("unknown_handle");
+  }
+  return c;
+}
+
+const wordHash = (word: string) => {
+  const input = enc.encode(word.trim().toLowerCase());
+  try {
+    return Array.from(sha256(input), (b) => b.toString(16).padStart(2, "0")).join("");
+  } finally {
+    wipe(input);
+  }
+};
+
+/** Distinct random word positions (0-based) for the retype check. */
+function checkPositions(): number[] {
+  const out = new Set<number>();
+  const r = new Uint32Array(1);
+  while (out.size < CEREMONY_CHECKS) {
+    crypto.getRandomValues(r);
+    out.add((r[0] ?? 0) % 24);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/** A stored ceremony as it comes back from the server; every field is re-checked. */
+function ceremonyOf(v: unknown, userId: string): RecoveryCeremony {
+  if (typeof v !== "object" || v === null) return fail("invalid_input");
+  const c = v as Record<string, unknown>;
+  const shards = c.shards as Record<string, unknown> | undefined;
+  if (c.version !== 1 || c.threshold !== 2 || c.memberId !== userId || typeof c.ceremonyId !== "string" || !/^[0-9a-f]{32}$/.test(c.ceremonyId)) fail("invalid_input");
+  if (!shards || typeof shards !== "object") fail("invalid_input");
+  const out = {} as Record<(typeof RECOVERY_FACTORS)[number], Uint8Array>;
+  for (const f of RECOVERY_FACTORS) {
+    const b = bytes(shards?.[f]);
+    if (b.byteLength > ENVELOPE_MAX_BYTES) fail("invalid_input");
+    out[f] = b;
+  }
+  return { version: 1, ceremonyId: c.ceremonyId as string, memberId: userId, threshold: 2, sealedMaster: bytes(c.sealedMaster), shards: out };
+}
 
 function discardVault(handle: string) {
   const slot = vaults.get(handle);
@@ -305,56 +396,151 @@ export const handlers: Handlers = {
     return storeMaster(userId, entropy);
   },
 
-  async "recovery.create"({ mnemonic }) {
-    let entropy: Uint8Array;
+  async "ceremony.begin"({ userId, serverFactorKey, mnemonic }) {
+    const owner = str(userId, 64);
+    if (!UUID.test(owner)) fail("invalid_input");
+    const serverKey = bytes(serverFactorKey);
+    if (serverKey.byteLength !== PUBLIC_KEY_BYTES) fail("invalid_input");
+    const device = await loadDeviceKey(owner);
+    let entropy: Uint8Array | null = null;
+    let paperSecret: Uint8Array | null = null;
     try {
-      entropy = masterKeyFromMnemonic(str(mnemonic, 1024));
-    } catch {
-      return fail("invalid_mnemonic");
-    }
-    try {
-      return await createVault(entropy);
+      if (mnemonic !== undefined) {
+        try {
+          entropy = masterKeyFromMnemonic(str(mnemonic, 1024));
+        } catch {
+          return fail("invalid_mnemonic");
+        }
+      } else {
+        // Without words, a Master Key is made only for a device that has none:
+        // a second key would orphan everything sealed under the first.
+        if (device) fail("master_key_required");
+        entropy = newMasterKey().key;
+      }
+      const key = await workspaceKeyFromMaster(entropy);
+      if (device && device.keyId !== key.keyId) fail("key_mismatch");
+      const paper = createPaperFactor(owner);
+      paperSecret = paper.keys.secretKey;
+      const { draft, deviceShare } = await beginRecoveryCeremony({
+        masterKey: entropy,
+        memberId: owner,
+        factorPublicKeys: { paper_guardian: paper.keys.publicKey, server_guardian: serverKey },
+      });
+      const words = paper.mnemonic.split(" ");
+      const positions = checkPositions();
+      const handle = newHandle();
+      ceremonies.set(handle, {
+        userId: owner,
+        keyId: key.keyId,
+        draft,
+        deviceShare,
+        install: device ? null : key,
+        checks: positions.map((position) => ({ position, hash: wordHash(words[position] ?? "") })),
+        attempts: 0,
+        checked: false,
+        sealed: false,
+        expiresAt: Date.now() + PENDING_TTL,
+        timer: setTimeout(() => discardCeremony(handle), PENDING_TTL),
+      });
+      return { handle, paperWords: paper.mnemonic, checkPositions: positions.map((p) => p + 1), keyId: key.keyId, fresh: !device };
     } finally {
-      wipe(entropy);
+      wipe(entropy, paperSecret);
     }
   },
 
-  async "recovery.check"({ vault, shard }) {
-    return checkShard(str(shard, 400), vault);
+  async "ceremony.checkWords"({ handle, answers }) {
+    const c = liveCeremony(handle);
+    if (!Array.isArray(answers) || answers.length !== c.checks.length) fail("invalid_input");
+    c.attempts++;
+    const given = new Map<number, string>();
+    for (const a of answers as unknown[]) {
+      const item = a as { position?: unknown; word?: unknown };
+      if (typeof item?.position !== "number") fail("invalid_input");
+      given.set((item.position as number) - 1, str(item.word, 32));
+    }
+    const ok = c.checks.every((check) => given.has(check.position) && wordHash(given.get(check.position) ?? "") === check.hash);
+    if (ok) c.checked = true;
+    else if (c.attempts >= CEREMONY_MAX_ATTEMPTS) discardCeremony(str(handle, 64));
+    return { ok };
   },
 
-  async "recovery.restore"({ userId, vault, shards, practice }) {
-    if (!Array.isArray(shards) || shards.length > 5) fail("invalid_input");
-    let entropy: Uint8Array;
+  async "ceremony.sealDevice"({ handle, prf }) {
+    const output = bytes(prf);
+    let secret: Uint8Array | null = null;
     try {
-      entropy = await openVault(shards.map((t) => str(t, 400)), vault);
-    } catch {
-      return fail("decrypt_failed");
-    }
-    if (practice) {
-      wipe(entropy);
-      return { keyId: null };
-    }
-    return storeMaster(userId, entropy);
-  },
-
-  async "recovery.sealShard"({ prf, shard, vaultId }) {
-    const k = bytes(prf);
-    try {
-      return { blob: await sealShardWithPrf(k, str(shard, 400), str(vaultId, 32)) };
+      const c = liveCeremony(handle);
+      if (!c.checked || c.sealed || !c.deviceShare) fail("invalid_input");
+      if (output.byteLength !== 32) fail("invalid_input");
+      const keys = factorKeys("device_prf", output, c.userId);
+      secret = keys.secretKey;
+      const share = c.deviceShare as Uint8Array;
+      c.deviceShare = null;
+      const ceremony = completeRecoveryCeremony(c.draft, share, keys.publicKey); // wipes the share
+      c.sealed = true;
+      return { ceremony, keyId: c.keyId };
     } finally {
-      wipe(k);
+      wipe(output, secret);
     }
   },
 
-  async "recovery.openShard"({ prf, blob, vaultId }) {
-    const k = bytes(prf);
+  async "ceremony.commit"({ handle, userId }) {
+    const h = str(handle, 64);
+    const c = liveCeremony(h);
+    if (!c.sealed || c.userId !== str(userId, 64)) fail("invalid_input");
+    const install = c.install;
+    discardCeremony(h);
+    if (install) await saveDeviceKey(c.userId, install);
+    return { keyId: c.keyId };
+  },
+
+  async "ceremony.discard"({ handle }) {
+    discardCeremony(str(handle, 64));
+    return null;
+  },
+
+  async "ceremony.restore"({ userId, ceremony, keyId, prf, paperWords, serverShare }) {
+    const owner = str(userId, 64);
+    const output = prf === undefined ? null : bytes(prf);
+    const server = serverShare === undefined ? null : bytes(serverShare);
+    const secrets: Uint8Array[] = [];
     try {
-      return { shard: await openShardWithPrf(k, str(blob, 600), str(vaultId, 32)) };
-    } catch {
-      return fail("decrypt_failed");
+      if (!UUID.test(owner)) fail("invalid_input");
+      const stored = ceremonyOf(ceremony, owner);
+      const expected = str(keyId, 200);
+      const factorSecretKeys: Partial<Record<(typeof RECOVERY_FACTORS)[number], Uint8Array>> = {};
+      if (output) {
+        if (output.byteLength !== 32) fail("invalid_input");
+        factorSecretKeys.device_prf = factorKeys("device_prf", output, owner).secretKey;
+        secrets.push(factorSecretKeys.device_prf);
+      }
+      if (paperWords !== undefined) {
+        try {
+          factorSecretKeys.paper_guardian = paperFactorKeys(str(paperWords, 1024), owner).secretKey;
+        } catch {
+          return fail("invalid_mnemonic");
+        }
+        secrets.push(factorSecretKeys.paper_guardian);
+      }
+      const openedShares = server ? { server_guardian: server.slice() } : undefined;
+      let entropy: Uint8Array;
+      try {
+        entropy = await recoverMasterKey({ ceremony: stored, memberId: owner, factorSecretKeys, openedShares });
+      } catch (e) {
+        if (e instanceof RecoveryError) return fail("decrypt_failed");
+        throw e;
+      }
+      try {
+        const key = await workspaceKeyFromMaster(entropy);
+        if (key.keyId !== expected) fail("key_mismatch");
+        const device = await loadDeviceKey(owner);
+        if (device && device.keyId !== key.keyId) fail("key_mismatch");
+        await saveDeviceKey(owner, key);
+        return { keyId: key.keyId };
+      } finally {
+        wipe(entropy);
+      }
     } finally {
-      wipe(k);
+      wipe(output, server, ...secrets);
     }
   },
 

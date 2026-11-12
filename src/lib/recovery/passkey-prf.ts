@@ -2,13 +2,13 @@
  * UI-thread WebAuthn PRF for the recovery vault and pairwise partner IDs.
  * WebAuthn is unavailable in workers, so the PRF output is created here and
  * transferred straight into the crypto enclave (which wipes it). Each purpose
- * has its own PRF salt, so the ledger key, the shard key and the pairwise root
+ * has its own PRF salt, so the ledger key, the recovery-ceremony factor and the pairwise root
  * can never be derived from one another.
  */
 import { captureEnclaveScope, enclave } from "@/lib/crypto-enclave/client";
 
 export const PRF_PURPOSE = {
-  shard: "ROUT-recovery-shard-PRF:v1",
+  ceremony: "ROUT-recovery-ceremony-PRF:v1",
   pairwise: "ROUT-pairwise-root-PRF:v1",
 } as const;
 export type PrfPurpose = keyof typeof PRF_PURPOSE;

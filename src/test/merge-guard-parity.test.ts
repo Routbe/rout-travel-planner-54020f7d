@@ -24,9 +24,19 @@ describe("account merge guards", () => {
     expect(unguarded).toEqual([]);
   });
 
-  it("recovery vaults and card records block a merge", () => {
-    for (const t of ["recovery_vaults", "recovery_attempts", "rout_card_generations", "card_freezes", "wallet_passes"]) {
+  it("the recovery ceremony and card records block a merge", () => {
+    for (const t of ["recovery_ceremonies", "rout_card_generations", "card_freezes", "wallet_passes"]) {
       expect(MERGE_TABLES[t]?.strategy).toBe("skip");
     }
+  });
+
+  it("the purged 3-of-5 vault is gone from the schema and the merge", () => {
+    const names = new Set(snap.tables.filter((t) => t.schema === "public").map((t) => t.name));
+    for (const t of ["recovery_vaults", "recovery_sealed_shards", "recovery_attempts"]) {
+      expect(names.has(t)).toBe(false);
+      expect(MERGE_TABLES[t]).toBeUndefined();
+      expect(merge.includes(`'merge_blocked:${t}'`)).toBe(false);
+    }
+    expect(snap.functions.filter((f) => f.schema === "public" && /^rout_recovery_(vault|shard|attempt)/.test(f.name))).toEqual([]);
   });
 });
