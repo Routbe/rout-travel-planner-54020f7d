@@ -92,6 +92,26 @@ describe("2-of-3 recovery wizard", () => {
     expect(mock.commit).toHaveBeenCalledWith("h1", "00000000-0000-4000-8000-0000000000aa");
   });
 
+  it("a failed save can be retried without sealing the passkey share a second time", async () => {
+    mock.save.mockRejectedValueOnce(new Error("Bevestiging geannuleerd."));
+    render(<RecoveryCeremonyPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: /Herstelkluis instellen/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Beginnen/ }));
+    await screen.findByText("paperword1");
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Verder" }));
+    fillCheck({ 3: "paperword3", 11: "paperword11", 20: "paperword20" });
+    fireEvent.click(screen.getByRole("button", { name: /Controleren/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Bevestigen met toegangssleutel/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Bevestiging geannuleerd.");
+    fireEvent.click(screen.getByRole("button", { name: /Bevestigen met toegangssleutel/ }));
+    await screen.findByText(/Je herstelkluis is actief/);
+    expect(mock.sealDevice).toHaveBeenCalledTimes(1);
+    expect(mock.prf).toHaveBeenCalledTimes(1);
+    expect(mock.save).toHaveBeenCalledTimes(2);
+    expect(mock.commit).toHaveBeenCalledTimes(1);
+  });
+
   it("asks for the existing Master Key words on a device that has one, and clears the field", async () => {
     mock.deviceStatus.mockResolvedValue({ keyId: "key-1" });
     render(<RecoveryCeremonyPanel />);

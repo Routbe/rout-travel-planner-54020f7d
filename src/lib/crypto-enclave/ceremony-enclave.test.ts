@@ -56,6 +56,26 @@ describe("2-of-3 ceremony in the crypto enclave", () => {
     expect(await code("ceremony.checkWords", { handle: begun.handle, answers: wrong })).toBe("unknown_handle");
   });
 
+  it("sealing happens once, and a failed device-key store can be retried at commit", async () => {
+    const userId = "00000000-0000-4000-8000-0000000000c9";
+    const begun = await call("ceremony.begin", { userId, serverFactorKey: serverFactorPublicKey(userId, SECRET) });
+    const words = begun.paperWords.split(" ");
+    const answers = begun.checkPositions.map((position) => ({ position, word: words[position - 1] ?? "" }));
+    await call("ceremony.checkWords", { handle: begun.handle, answers });
+    await call("ceremony.sealDevice", { handle: begun.handle, prf: prfOf(9) });
+    expect(await code("ceremony.sealDevice", { handle: begun.handle, prf: prfOf(9) })).toBe("invalid_input");
+    const open = indexedDB.open.bind(indexedDB);
+    indexedDB.open = () => { throw new Error("storage_blocked"); };
+    try {
+      expect(await code("ceremony.commit", { handle: begun.handle, userId })).not.toBe("ok");
+    } finally {
+      indexedDB.open = open;
+    }
+    expect((await call("ceremony.commit", { handle: begun.handle, userId })).keyId).toBe(begun.keyId);
+    expect((await loadDeviceKey(userId))?.keyId).toBe(begun.keyId);
+    expect(await code("ceremony.commit", { handle: begun.handle, userId })).toBe("unknown_handle");
+  });
+
   it("any two of passkey, paper and ROUT's piece restore the same key on a new device; one does not", async () => {
     const userId = "00000000-0000-4000-8000-0000000000c3";
     const { ceremony, keyId, paper } = await setup(userId);

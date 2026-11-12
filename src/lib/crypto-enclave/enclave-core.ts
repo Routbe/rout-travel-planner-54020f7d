@@ -547,10 +547,12 @@ export const handlers: Handlers = {
     const h = str(handle, 64);
     const c = liveCeremony(h);
     if (!c.sealed || c.userId !== str(userId, 64)) fail("invalid_input");
-    const install = c.install;
+    // Install first: if storing the device key fails, the ceremony stays
+    // available so the same step can be retried without new words.
+    if (c.install) await saveDeviceKey(c.userId, c.install);
+    const keyId = c.keyId;
     discardCeremony(h);
-    if (install) await saveDeviceKey(c.userId, install);
-    return { keyId: c.keyId };
+    return { keyId };
   },
 
   async "ceremony.discard"({ handle }) {

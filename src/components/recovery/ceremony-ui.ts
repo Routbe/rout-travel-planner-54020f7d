@@ -18,7 +18,7 @@ export function ceremonyMessage(e: unknown): string {
     if (e.code === "decrypt_failed") return "Dit stuk opent je herstelkluis niet. Controleer of het bij deze kluis hoort.";
     if (e.code === "unknown_handle") return "Deze stap is verlopen. Begin opnieuw.";
     if (e.code === "enclave_unavailable") return "Je browser blokkeert de beveiligde rekenmodule.";
-    return "Er ging iets mis in de beveiligde rekenmodule. Probeer opnieuw.";
+    return `Er ging iets mis in de beveiligde rekenmodule (${e.code}). Probeer opnieuw.`;
   }
   if (e instanceof Error && e.message === "prf_unsupported") return "Deze toegangssleutel kan je herstelkluis niet beveiligen. Voeg een nieuwere toegangssleutel toe, bijvoorbeeld die van je telefoon of computer.";
   if (e instanceof Error && /NotAllowed|abort/i.test(e.name + e.message)) return "Geannuleerd of geen toegangssleutel gevonden.";
