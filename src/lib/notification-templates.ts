@@ -409,44 +409,44 @@ const COPY: Record<NotificationKind, Record<NotificationLocale, Omit<Copy, "cta"
     nl: {
       subject: "Je herstelkluis is aangepast",
       title: "Herstelkluis aangepast",
-      body: "Je herstelkluis (3 van 5 scherven) is net aangemaakt, vernieuwd of verwijderd. Oude scherven werken niet meer. Was jij dit niet? Zet je account meteen op slot via Account & Beveiliging.",
+      body: "Je herstelkluis (2 van 3: toegangssleutel, 24 papieren woorden en ROUT) is net aangemaakt, vernieuwd of verwijderd. Oude herstelwoorden werken niet meer. Was jij dit niet? Zet je account meteen op slot via Account & Beveiliging.",
     },
     en: {
       subject: "Your recovery vault changed",
       title: "Recovery vault changed",
-      body: "Your recovery vault (3 of 5 shards) was just created, renewed or removed. Old shards no longer work. Not you? Lock your account right away in Account & Security.",
+      body: "Your recovery vault (2 of 3: passkey, 24 paper words and ROUT) was just created, renewed or removed. Old recovery words no longer work. Not you? Lock your account right away in Account & Security.",
     },
     fr: {
       subject: "Votre coffre de récupération a changé",
       title: "Coffre de récupération modifié",
-      body: "Votre coffre de récupération (3 fragments sur 5) vient d'être créé, renouvelé ou supprimé. Les anciens fragments ne fonctionnent plus. Ce n'était pas vous ? Verrouillez votre compte dans Compte & Sécurité.",
+      body: "Votre coffre de récupération (2 sur 3 : clé d'accès, 24 mots papier et ROUT) vient d'être créé, renouvelé ou supprimé. Les anciens mots de récupération ne fonctionnent plus. Ce n'était pas vous ? Verrouillez votre compte dans Compte & Sécurité.",
     },
     de: {
       subject: "Dein Wiederherstellungstresor wurde geändert",
       title: "Wiederherstellungstresor geändert",
-      body: "Dein Wiederherstellungstresor (3 von 5 Teilen) wurde gerade erstellt, erneuert oder entfernt. Alte Teile funktionieren nicht mehr. Nicht du? Sperre dein Konto sofort unter Konto & Sicherheit.",
+      body: "Dein Wiederherstellungstresor (2 von 3: Passkey, 24 Papierwörter und ROUT) wurde gerade erstellt, erneuert oder entfernt. Alte Wiederherstellungswörter funktionieren nicht mehr. Nicht du? Sperre dein Konto sofort unter Konto & Sicherheit.",
     },
   },
   recovery_attempt: {
     nl: {
       subject: "Iemand herstelt je hoofdsleutel",
-      title: "Herstelpoging met je scherven",
-      body: "Er is net een herstel met je scherven gestart op een toestel dat met je account is ingelogd. Was jij dit niet? Vernieuw je scherven en zet je account op slot via Account & Beveiliging.",
+      title: "Herstelpoging voor je hoofdsleutel",
+      body: "Er is net een herstel van je hoofdsleutel gestart op een toestel dat met je account is ingelogd. ROUT gaf zijn eigen herstelstuk vrij; zonder je toegangssleutel of je 24 papieren woorden opent het niets. Was jij dit niet? Maak een nieuwe herstelkluis en zet je account op slot via Account & Beveiliging.",
     },
     en: {
       subject: "Someone is restoring your master key",
-      title: "Recovery attempt with your shards",
-      body: "A recovery with your shards just started on a device signed in to your account. Not you? Renew your shards and lock your account in Account & Security.",
+      title: "Recovery attempt for your master key",
+      body: "A recovery of your master key just started on a device signed in to your account. ROUT released its own recovery piece; without your passkey or your 24 paper words it opens nothing. Not you? Create a new recovery vault and lock your account in Account & Security.",
     },
     fr: {
       subject: "Quelqu'un restaure votre clé principale",
-      title: "Tentative de récupération avec vos fragments",
-      body: "Une récupération avec vos fragments vient de démarrer sur un appareil connecté à votre compte. Ce n'était pas vous ? Renouvelez vos fragments et verrouillez votre compte dans Compte & Sécurité.",
+      title: "Tentative de récupération de votre clé principale",
+      body: "Une récupération de votre clé principale vient de démarrer sur un appareil connecté à votre compte. ROUT a libéré sa propre pièce ; sans votre clé d'accès ou vos 24 mots papier, elle n'ouvre rien. Ce n'était pas vous ? Créez un nouveau coffre et verrouillez votre compte dans Compte & Sécurité.",
     },
     de: {
       subject: "Jemand stellt deinen Hauptschlüssel wieder her",
-      title: "Wiederherstellungsversuch mit deinen Teilen",
-      body: "Gerade wurde auf einem Gerät, das mit deinem Konto angemeldet ist, eine Wiederherstellung mit deinen Teilen gestartet. Nicht du? Erneuere deine Teile und sperre dein Konto unter Konto & Sicherheit.",
+      title: "Wiederherstellungsversuch für deinen Hauptschlüssel",
+      body: "Gerade wurde auf einem Gerät, das mit deinem Konto angemeldet ist, eine Wiederherstellung deines Hauptschlüssels gestartet. ROUT hat sein eigenes Teil freigegeben; ohne deinen Passkey oder deine 24 Papierwörter öffnet es nichts. Nicht du? Erstelle einen neuen Tresor und sperre dein Konto unter Konto & Sicherheit.",
     },
   },
 };
