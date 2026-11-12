@@ -41,7 +41,10 @@ export const getRecoveryCeremonyStatus = createServerFn({ method: "GET" })
     const { sql } = await import("@/lib/neon");
     const rows = (await sql`select * from public.rout_recovery_ceremony_status()`) as { ceremony_id: string; key_id: string; created_at: string }[];
     const r = rows[0];
-    return { ceremony: r ? { ceremonyId: r.ceremony_id, keyId: r.key_id, createdAt: String(r.created_at) } : null };
+    const login = r ? ((await sql`select public.rout_recovery_ceremony_login_key() is not null as ok`) as { ok: boolean }[]) : [];
+    return {
+      ceremony: r ? { ceremonyId: r.ceremony_id, keyId: r.key_id, createdAt: String(r.created_at), canSignIn: login[0]?.ok === true } : null,
+    };
   });
 
 /** Public key of ROUT's factor for this member; the browser seals one shard to it. */
@@ -55,7 +58,9 @@ export const getRecoveryServerKey = createServerFn({ method: "GET" })
 
 export const saveRecoveryCeremony = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((d: unknown) => z.object({ ceremony: wireSchema, deviceCredential: credentialSchema }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ ceremony: wireSchema, deviceCredential: credentialSchema, loginKey: z.string().regex(/^[A-Za-z0-9+/]{43}=$/) }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { requirePasskeyStepUp } = await import("@/lib/auth/step-up-guard.server");
     await requirePasskeyStepUp(context.userId, "recovery_vault");
@@ -71,7 +76,7 @@ export const saveRecoveryCeremony = createServerFn({ method: "POST" })
       return { ok: false as const, error: "server_shard_mismatch" };
     }
     const { sql } = await import("@/lib/neon");
-    await sql`select public.rout_recovery_ceremony_put(${c.ceremonyId}, ${c.keyId}, ${c.sealedMaster}, ${c.shards.device_prf}, ${c.shards.paper_guardian}, ${c.shards.server_guardian}, ${data.deviceCredential})`;
+    await sql`select public.rout_recovery_ceremony_put(${c.ceremonyId}, ${c.keyId}, ${c.sealedMaster}, ${c.shards.device_prf}, ${c.shards.paper_guardian}, ${c.shards.server_guardian}, ${data.deviceCredential}, ${data.loginKey})`;
     const { notifyUser } = await import("@/lib/notifications.server");
     await notifyUser(context.userId, "recovery_vault_changed", { action: "saved" });
     await audit(context.userId, "recovery_ceremony.saved", { ceremonyId: c.ceremonyId });

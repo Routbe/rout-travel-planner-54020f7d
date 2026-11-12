@@ -18440,6 +18440,14 @@
           "default": "now()",
           "identity": null,
           "generated": null
+        },
+        {
+          "name": "login_key",
+          "type": "text",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
         }
       ],
       "constraints": [
@@ -18462,6 +18470,11 @@
           "name": "recovery_ceremonies_key_id_check",
           "kind": "c",
           "def": "CHECK (((char_length(key_id) >= 8) AND (char_length(key_id) <= 200)))"
+        },
+        {
+          "name": "recovery_ceremonies_login_key_check",
+          "kind": "c",
+          "def": "CHECK (((login_key IS NULL) OR (login_key ~ '^[A-Za-z0-9+/]{43}=$'::text)))"
         },
         {
           "name": "recovery_ceremonies_paper_shard_check",
@@ -29003,9 +29016,15 @@
     },
     {
       "schema": "public",
+      "name": "rout_recovery_ceremony_login_key",
+      "args": "",
+      "def": "CREATE OR REPLACE FUNCTION public.rout_recovery_ceremony_login_key()\n RETURNS text\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\n  select c.login_key from public.recovery_ceremonies c where c.user_id = public.rout_current_user_id();\n$function$"
+    },
+    {
+      "schema": "public",
       "name": "rout_recovery_ceremony_put",
-      "args": "p_ceremony_id text, p_key_id text, p_sealed_master text, p_device_shard text, p_paper_shard text, p_server_shard text, p_device_credential text",
-      "def": "CREATE OR REPLACE FUNCTION public.rout_recovery_ceremony_put(p_ceremony_id text, p_key_id text, p_sealed_master text, p_device_shard text, p_paper_shard text, p_server_shard text, p_device_credential text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare v_user uuid := public.rout_current_user_id();\nbegin\n  if v_user is null then raise exception 'no member context' using errcode = '42501'; end if;\n  insert into public.recovery_ceremonies as c\n    (user_id, ceremony_id, key_id, sealed_master, device_shard, paper_shard, server_shard, device_credential, created_at)\n  values (v_user, p_ceremony_id, p_key_id, p_sealed_master, p_device_shard, p_paper_shard, p_server_shard, p_device_credential, pg_catalog.now())\n  on conflict (user_id) do update set\n    ceremony_id = excluded.ceremony_id, key_id = excluded.key_id, sealed_master = excluded.sealed_master,\n    device_shard = excluded.device_shard, paper_shard = excluded.paper_shard, server_shard = excluded.server_shard,\n    device_credential = excluded.device_credential, created_at = excluded.created_at;\nend $function$"
+      "args": "p_ceremony_id text, p_key_id text, p_sealed_master text, p_device_shard text, p_paper_shard text, p_server_shard text, p_device_credential text, p_login_key text",
+      "def": "CREATE OR REPLACE FUNCTION public.rout_recovery_ceremony_put(p_ceremony_id text, p_key_id text, p_sealed_master text, p_device_shard text, p_paper_shard text, p_server_shard text, p_device_credential text, p_login_key text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare v_user uuid := public.rout_current_user_id();\nbegin\n  if v_user is null then raise exception 'no member context' using errcode = '42501'; end if;\n  if p_login_key is null then raise exception 'login key required' using errcode = '22023'; end if;\n  insert into public.recovery_ceremonies as c\n    (user_id, ceremony_id, key_id, sealed_master, device_shard, paper_shard, server_shard, device_credential, login_key, created_at)\n  values (v_user, p_ceremony_id, p_key_id, p_sealed_master, p_device_shard, p_paper_shard, p_server_shard, p_device_credential, p_login_key, pg_catalog.now())\n  on conflict (user_id) do update set\n    ceremony_id = excluded.ceremony_id, key_id = excluded.key_id, sealed_master = excluded.sealed_master,\n    device_shard = excluded.device_shard, paper_shard = excluded.paper_shard, server_shard = excluded.server_shard,\n    device_credential = excluded.device_credential, login_key = excluded.login_key, created_at = excluded.created_at;\nend $function$"
     },
     {
       "schema": "public",
@@ -29065,7 +29084,7 @@
       "schema": "public",
       "name": "rout_security_code_issue",
       "args": "p_user uuid, p_purpose text, p_code_hash text, p_ttl_minutes integer",
-      "def": "CREATE OR REPLACE FUNCTION public.rout_security_code_issue(p_user uuid, p_purpose text, p_code_hash text, p_ttl_minutes integer)\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare v_user uuid := public.rout_current_user_id();\nbegin\n  if v_user is null or p_user is distinct from v_user then return 'no_context'; end if;\n  if p_purpose is null or p_purpose not in ('merge', 'password', 'two_factor', 'workspace_convert',\n       'delete_account', 'identity_link', 'step_up', 'step_up_sms')\n     or p_code_hash is null or p_code_hash !~ '^[A-Za-z0-9+/]{43}=$'\n     or p_ttl_minutes is null or p_ttl_minutes not between 1 and 15 then\n    return 'invalid';\n  end if;\n  perform pg_advisory_xact_lock(hashtextextended('rout.security_code:' || v_user::text || ':' || p_purpose, 0));\n  if (select count(*) from public.security_codes\n       where user_id = v_user and purpose = p_purpose and created_at > now() - interval '15 minutes') >= 5 then\n    return 'rate_limited';\n  end if;\n  update public.security_codes set consumed_at = now()\n   where user_id = v_user and purpose = p_purpose and consumed_at is null;\n  insert into public.security_codes (user_id, purpose, code_hash, expires_at)\n  values (v_user, p_purpose, p_code_hash, now() + make_interval(mins => p_ttl_minutes));\n  return 'ok';\nend $function$"
+      "def": "CREATE OR REPLACE FUNCTION public.rout_security_code_issue(p_user uuid, p_purpose text, p_code_hash text, p_ttl_minutes integer)\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare v_user uuid := public.rout_current_user_id();\nbegin\n  if v_user is null or p_user is distinct from v_user then return 'no_context'; end if;\n  if p_purpose is null or p_purpose not in ('merge', 'password', 'two_factor', 'workspace_convert',\n       'delete_account', 'identity_link', 'step_up', 'step_up_sms', 'recovery')\n     or p_code_hash is null or p_code_hash !~ '^[A-Za-z0-9+/]{43}=$'\n     or p_ttl_minutes is null or p_ttl_minutes not between 1 and 15 then\n    return 'invalid';\n  end if;\n  perform pg_advisory_xact_lock(hashtextextended('rout.security_code:' || v_user::text || ':' || p_purpose, 0));\n  if (select count(*) from public.security_codes\n       where user_id = v_user and purpose = p_purpose and created_at > now() - interval '15 minutes') >= 5 then\n    return 'rate_limited';\n  end if;\n  update public.security_codes set consumed_at = now()\n   where user_id = v_user and purpose = p_purpose and consumed_at is null;\n  insert into public.security_codes (user_id, purpose, code_hash, expires_at)\n  values (v_user, p_purpose, p_code_hash, now() + make_interval(mins => p_ttl_minutes));\n  return 'ok';\nend $function$"
     },
     {
       "schema": "public",

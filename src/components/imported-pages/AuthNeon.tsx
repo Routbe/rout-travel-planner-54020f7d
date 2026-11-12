@@ -662,6 +662,10 @@ export default function AuthNeon({ initialMode = "signin" }: { initialMode?: Mod
               </div>
             ) : (
               <form onSubmit={fileRecovery} className="space-y-3.5">
+                <Link to="/recovery" className="flex items-start gap-2 rounded-xl border border-border bg-card/60 p-3 text-sm hover:bg-muted/60">
+                  <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                  <span><span className="font-medium">Herstelkluis ingesteld?</span> <span className="text-muted-foreground">Log meteen in met 2 van je 3 stukken.</span></span>
+                </Link>
                 {emailField}
                 <div className="space-y-1">
                   <Label htmlFor="auth-recovery-note" className="text-sm">{t("auth.pk.recoveryNote")}</Label>

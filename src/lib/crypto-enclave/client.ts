@@ -191,6 +191,8 @@ export const enclave = {
     discard: (handle: string) => callEnclave("ceremony.discard", { handle }),
     restore: (input: { userId: string; ceremony: RecoveryCeremony; keyId: string; prf?: Uint8Array; paperWords?: string; serverShare?: Uint8Array }) =>
       callEnclave("ceremony.restore", input, moved(input.prf, input.serverShare)),
+    recoverLogin: (input: { userId: string; ceremony: RecoveryCeremony; keyId: string; challenge: string; prf?: Uint8Array; paperWords?: string; serverShare?: Uint8Array }) =>
+      callEnclave("ceremony.recoverLogin", input, moved(input.prf, input.serverShare)),
   },
   pairwise: {
     claim: (root: Uint8Array, sector: string, nonce: string) => callEnclave("pairwise.claim", { root, sector, nonce }, moved(root)),

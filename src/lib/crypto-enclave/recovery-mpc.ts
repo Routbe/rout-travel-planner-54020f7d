@@ -21,6 +21,7 @@
  * and the one they get back.
  */
 import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { randomBytes } from "@noble/hashes/utils.js";
@@ -243,4 +244,15 @@ export async function recoverMasterKey(input: {
   } finally {
     wipe(ceremonyKey, ...shares);
   }
+}
+
+/**
+ * Ed25519 login key of the Master Key (sign-in by recovery). Only the public
+ * key leaves; the caller wipes `secretKey` (the seed).
+ */
+export function loginKeyFromMaster(masterKey: Uint8Array, memberId: string): { secretKey: Uint8Array; publicKey: Uint8Array } {
+  checkMember(memberId);
+  if (masterKey.length !== MASTER_KEY_BYTES) throw new TypeError("master_key_must_be_32_bytes");
+  const secretKey = hkdf(sha256, masterKey, enc.encode("rout.recovery.login-key.v1"), enc.encode(memberId), 32);
+  return { secretKey, publicKey: ed25519.getPublicKey(secretKey) };
 }

@@ -35,6 +35,8 @@ import { ENVELOPE_MAX_BYTES, ENVELOPE_MAX_PLAINTEXT, generateRecipientKeys, keyI
 import { loadRve1Key, rve1SeedAad, saveRve1Key } from "./rve1-key-store";
 import { vaultContext } from "@/lib/vault/vault-context";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { CHALLENGE_RE, recoveryLoginMessage } from "@/lib/recovery/recovery-login";
 import {
   RECOVERY_FACTORS,
   RecoveryError,
@@ -42,6 +44,7 @@ import {
   completeRecoveryCeremony,
   createPaperFactor,
   factorKeys,
+  loginKeyFromMaster,
   paperFactorKeys,
   recoverMasterKey,
   type CeremonyDraft,
@@ -86,6 +89,8 @@ const ledgerKeys = new Map<string, CryptoKey>();
 type CeremonySlot = {
   userId: string;
   keyId: string;
+  /** Public half of the Master Key's login key (sign-in by recovery). */
+  loginKey: Uint8Array;
   draft: CeremonyDraft;
   deviceShare: Uint8Array | null;
   install: WorkspaceKey | null;
@@ -139,6 +144,58 @@ function checkPositions(): number[] {
     out.add((r[0] ?? 0) % 24);
   }
   return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * Any two of passkey PRF, paper words and the server's opened share rebuild the
+ * Master Key; `then` runs while it exists (to sign), after which it is installed
+ * as this device's key. Shares, factor keys and the Master Key are zero-filled
+ * in `finally`, also on every failure.
+ */
+async function rebuildMaster<T extends object>(
+  input: { userId: unknown; ceremony: unknown; keyId: unknown; prf?: unknown; paperWords?: unknown; serverShare?: unknown },
+  then: (entropy: Uint8Array, owner: string) => Promise<T>,
+): Promise<T & { keyId: string }> {
+  const owner = str(input.userId, 64);
+  const output = input.prf === undefined ? null : bytes(input.prf);
+  const server = input.serverShare === undefined ? null : bytes(input.serverShare);
+  const secrets: Uint8Array[] = [];
+  let entropy: Uint8Array | null = null;
+  try {
+    if (!UUID.test(owner)) fail("invalid_input");
+    const stored = ceremonyOf(input.ceremony, owner);
+    const expected = str(input.keyId, 200);
+    const factorSecretKeys: Partial<Record<(typeof RECOVERY_FACTORS)[number], Uint8Array>> = {};
+    if (output) {
+      if (output.byteLength !== 32) fail("invalid_input");
+      factorSecretKeys.device_prf = factorKeys("device_prf", output, owner).secretKey;
+      secrets.push(factorSecretKeys.device_prf);
+    }
+    if (input.paperWords !== undefined) {
+      try {
+        factorSecretKeys.paper_guardian = paperFactorKeys(str(input.paperWords, 1024), owner).secretKey;
+      } catch {
+        return fail("invalid_mnemonic");
+      }
+      secrets.push(factorSecretKeys.paper_guardian);
+    }
+    const openedShares = server ? { server_guardian: server.slice() } : undefined;
+    try {
+      entropy = await recoverMasterKey({ ceremony: stored, memberId: owner, factorSecretKeys, openedShares });
+    } catch (e) {
+      if (e instanceof RecoveryError) return fail("decrypt_failed");
+      throw e;
+    }
+    const key = await workspaceKeyFromMaster(entropy);
+    if (key.keyId !== expected) fail("key_mismatch");
+    const device = await loadDeviceKey(owner);
+    if (device && device.keyId !== key.keyId) fail("key_mismatch");
+    const extra = await then(entropy, owner);
+    await saveDeviceKey(owner, key);
+    return { ...extra, keyId: key.keyId };
+  } finally {
+    wipe(entropy, output, server, ...secrets);
+  }
 }
 
 /** A stored ceremony as it comes back from the server; every field is re-checked. */
@@ -419,6 +476,8 @@ export const handlers: Handlers = {
       }
       const key = await workspaceKeyFromMaster(entropy);
       if (device && device.keyId !== key.keyId) fail("key_mismatch");
+      const login = loginKeyFromMaster(entropy, owner);
+      wipe(login.secretKey);
       const paper = createPaperFactor(owner);
       paperSecret = paper.keys.secretKey;
       const { draft, deviceShare } = await beginRecoveryCeremony({
@@ -432,6 +491,7 @@ export const handlers: Handlers = {
       ceremonies.set(handle, {
         userId: owner,
         keyId: key.keyId,
+        loginKey: login.publicKey,
         draft,
         deviceShare,
         install: device ? null : key,
@@ -477,7 +537,7 @@ export const handlers: Handlers = {
       c.deviceShare = null;
       const ceremony = completeRecoveryCeremony(c.draft, share, keys.publicKey); // wipes the share
       c.sealed = true;
-      return { ceremony, keyId: c.keyId };
+      return { ceremony, keyId: c.keyId, loginKey: c.loginKey.slice() };
     } finally {
       wipe(output, secret);
     }
@@ -499,49 +559,30 @@ export const handlers: Handlers = {
   },
 
   async "ceremony.restore"({ userId, ceremony, keyId, prf, paperWords, serverShare }) {
-    const owner = str(userId, 64);
-    const output = prf === undefined ? null : bytes(prf);
-    const server = serverShare === undefined ? null : bytes(serverShare);
-    const secrets: Uint8Array[] = [];
-    try {
-      if (!UUID.test(owner)) fail("invalid_input");
-      const stored = ceremonyOf(ceremony, owner);
-      const expected = str(keyId, 200);
-      const factorSecretKeys: Partial<Record<(typeof RECOVERY_FACTORS)[number], Uint8Array>> = {};
-      if (output) {
-        if (output.byteLength !== 32) fail("invalid_input");
-        factorSecretKeys.device_prf = factorKeys("device_prf", output, owner).secretKey;
-        secrets.push(factorSecretKeys.device_prf);
-      }
-      if (paperWords !== undefined) {
-        try {
-          factorSecretKeys.paper_guardian = paperFactorKeys(str(paperWords, 1024), owner).secretKey;
-        } catch {
-          return fail("invalid_mnemonic");
-        }
-        secrets.push(factorSecretKeys.paper_guardian);
-      }
-      const openedShares = server ? { server_guardian: server.slice() } : undefined;
-      let entropy: Uint8Array;
-      try {
-        entropy = await recoverMasterKey({ ceremony: stored, memberId: owner, factorSecretKeys, openedShares });
-      } catch (e) {
-        if (e instanceof RecoveryError) return fail("decrypt_failed");
-        throw e;
-      }
-      try {
-        const key = await workspaceKeyFromMaster(entropy);
-        if (key.keyId !== expected) fail("key_mismatch");
-        const device = await loadDeviceKey(owner);
-        if (device && device.keyId !== key.keyId) fail("key_mismatch");
-        await saveDeviceKey(owner, key);
-        return { keyId: key.keyId };
-      } finally {
-        wipe(entropy);
-      }
-    } finally {
-      wipe(output, server, ...secrets);
+    return rebuildMaster({ userId, ceremony, keyId, prf, paperWords, serverShare }, async () => ({}));
+  },
+
+  /** Sign-in by recovery: rebuild, sign the server challenge, install, wipe everything. */
+  async "ceremony.recoverLogin"({ userId, ceremony, keyId, prf, paperWords, serverShare, challenge }) {
+    const ch = str(challenge, 64);
+    if (!CHALLENGE_RE.test(ch)) {
+      fail("invalid_input");
     }
+    return rebuildMaster({ userId, ceremony, keyId, prf, paperWords, serverShare }, async (entropy, owner) => {
+      const message = (() => {
+        try {
+          return recoveryLoginMessage(owner, ch);
+        } catch {
+          return fail("invalid_input");
+        }
+      })();
+      const login = loginKeyFromMaster(entropy, owner);
+      try {
+        return { signature: ed25519.sign(message, login.secretKey) };
+      } finally {
+        wipe(login.secretKey, message);
+      }
+    });
   },
 
   async "pairwise.claim"({ root, sector, nonce }) {

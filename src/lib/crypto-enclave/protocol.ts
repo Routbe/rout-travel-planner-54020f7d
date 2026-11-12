@@ -58,7 +58,7 @@ export interface EnclaveOps {
     res: { handle: string; paperWords: string; checkPositions: number[]; keyId: string; fresh: boolean };
   };
   "ceremony.checkWords": { req: { handle: string; answers: { position: number; word: string }[] }; res: { ok: boolean } };
-  "ceremony.sealDevice": { req: { handle: string; prf: Uint8Array }; res: { ceremony: RecoveryCeremony; keyId: string } };
+  "ceremony.sealDevice": { req: { handle: string; prf: Uint8Array }; res: { ceremony: RecoveryCeremony; keyId: string; loginKey: Uint8Array } };
   /** After the server stored the ceremony: installs a freshly made Master Key on this device. */
   "ceremony.commit": { req: { handle: string; userId: string }; res: { keyId: string } };
   "ceremony.discard": { req: { handle: string }; res: null };
@@ -66,6 +66,11 @@ export interface EnclaveOps {
   "ceremony.restore": {
     req: { userId: string; ceremony: RecoveryCeremony; keyId: string; prf?: Uint8Array; paperWords?: string; serverShare?: Uint8Array };
     res: { keyId: string };
+  };
+  /** Sign-in by recovery: same as restore, plus an Ed25519 signature over the server challenge. */
+  "ceremony.recoverLogin": {
+    req: { userId: string; ceremony: RecoveryCeremony; keyId: string; challenge: string; prf?: Uint8Array; paperWords?: string; serverShare?: Uint8Array };
+    res: { keyId: string; signature: Uint8Array };
   };
   /** Pairwise partner subject from a passkey PRF root (transferred, wiped). */
   "pairwise.claim": { req: { root: Uint8Array; sector: string; nonce: string }; res: SubjectClaim };

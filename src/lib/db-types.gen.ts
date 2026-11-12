@@ -1772,6 +1772,7 @@ export interface PublicRecoveryCeremoniesRow {
   "server_shard": string;
   "device_credential": string;
   "created_at": string | Date;
+  "login_key": string | null;
 }
 
 export interface PublicReferralsRow {

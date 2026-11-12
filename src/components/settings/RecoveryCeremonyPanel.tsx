@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Check, FileText, Fingerprint, KeyRound, Plus, RotateCcw, Server, ShieldCheck, Trash2 } from "lucide-react";
@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { requestStepUp, withStepUp } from "@/components/auth/StepUpDialog";
 import { enclave, EnclaveError } from "@/lib/crypto-enclave/client";
+import { ceremonyMessage as message, takeInput, takeValue } from "@/components/recovery/ceremony-ui";
 import { refreshSessionFreshness } from "@/lib/auth/step-up.functions";
 import { addPasskey } from "@/lib/webauthn.functions";
 import { deviceLabelFrom } from "@/lib/passkey-label";
-import { ceremonyFromWire, ceremonyToWire, fromB64, wordCount } from "@/lib/recovery/ceremony-wire";
+import { ceremonyFromWire, ceremonyToWire, fromB64, toB64, wordCount } from "@/lib/recovery/ceremony-wire";
 import {
   beginCeremonyRestore, deleteRecoveryCeremony, finishCeremonyRestore, getRecoveryCeremonyStatus, getRecoveryServerKey, saveRecoveryCeremony,
 } from "@/lib/recovery/ceremony.functions";
@@ -27,29 +28,6 @@ const STEPS: { id: Exclude<Step, "done">; label: string }[] = [
   { id: "passkey", label: "Toegangssleutel" },
 ];
 
-/** Reads an uncontrolled field once and empties it, so the words stay out of React and the DOM. */
-function takeInput(el: HTMLInputElement | HTMLTextAreaElement | null | undefined): string {
-  if (!el) return "";
-  const v = el.value.trim();
-  el.value = "";
-  return v;
-}
-const takeValue = (ref: RefObject<HTMLTextAreaElement | null>) => takeInput(ref.current);
-
-function message(e: unknown): string {
-  if (e instanceof EnclaveError) {
-    if (e.code === "invalid_mnemonic") return "Deze woorden kloppen niet. Controleer elk woord en de volgorde.";
-    if (e.code === "key_mismatch") return "Deze woorden horen bij een andere hoofdsleutel dan die op dit toestel.";
-    if (e.code === "master_key_required") return "Dit toestel heeft al een hoofdsleutel. Typ eerst je huidige 24 herstelwoorden.";
-    if (e.code === "decrypt_failed") return "Dit stuk opent je herstelkluis niet. Controleer of het bij deze kluis hoort.";
-    if (e.code === "unknown_handle") return "Deze stap is verlopen. Begin opnieuw.";
-    if (e.code === "enclave_unavailable") return "Je browser blokkeert de beveiligde rekenmodule.";
-    return "Er ging iets mis in de beveiligde rekenmodule. Probeer opnieuw.";
-  }
-  if (e instanceof Error && e.message === "prf_unsupported") return "Deze toegangssleutel kan je herstelkluis niet beveiligen. Voeg een nieuwere toegangssleutel toe, bijvoorbeeld die van je telefoon of computer.";
-  if (e instanceof Error && /NotAllowed|abort/i.test(e.name + e.message)) return "Geannuleerd of geen toegangssleutel gevonden.";
-  return e instanceof Error ? e.message : "Er ging iets mis.";
-}
 
 /**
  * Herstelkluis 2 van 3: passkey + 24 paper words + ROUT's own piece. Every
@@ -122,6 +100,9 @@ function Overview({ state, deviceKey, onSetup, onRestore, onChanged }: {
         <ShieldCheck className="mt-0.5 size-4 shrink-0" />
         <span>Actief sinds {since}. {onThisDevice ? "Dit toestel gebruikt deze hoofdsleutel." : "Je hoofdsleutel staat nog niet op dit toestel. Zet hem terug met 2 van je 3 stukken."}</span>
       </p>
+      {!state.ceremony.canSignIn && (
+        <p className="text-sm text-muted-foreground">Deze kluis is gemaakt vóór inloggen met herstel bestond. Stel hem opnieuw in, dan kun je er ook mee inloggen als je buitengesloten bent.</p>
+      )}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         {!onThisDevice && <Button onClick={onRestore}><RotateCcw /> Hoofdsleutel terugzetten</Button>}
         <Button variant="soft" onClick={onSetup}><KeyRound /> Opnieuw instellen</Button>
@@ -250,7 +231,7 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
       const { withPasskeyPrf } = await import("@/lib/recovery/passkey-prf");
       const sealed = await withPasskeyPrf("ceremony", async (output, credential) => ({ credential, ...(await enclave.ceremony.sealDevice(h, output)) }));
       scope.assertCurrent();
-      const r = await withStepUp(() => save({ data: { ceremony: ceremonyToWire(sealed.ceremony, sealed.keyId), deviceCredential: sealed.credential } }));
+      const r = await withStepUp(() => save({ data: { ceremony: ceremonyToWire(sealed.ceremony, sealed.keyId), deviceCredential: sealed.credential, loginKey: toB64(sealed.loginKey) } }));
       if (!r.ok) throw new Error("ROUT kon zijn stuk niet controleren. Begin opnieuw.");
       await enclave.ceremony.commit(h, userId);
       handle.current = null;
