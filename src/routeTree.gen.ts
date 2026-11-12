@@ -62,6 +62,7 @@ import { Route as SovereigntyRouteImport } from './routes/sovereignty'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as TRouteImport } from './routes/t'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TourRouteImport } from './routes/tour'
 import { Route as VcardQrRouteImport } from './routes/vcard-qr'
@@ -700,6 +701,11 @@ const StudioRoute = StudioRouteImport.update({
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TRoute = TRouteImport.update({
+  id: '/t',
+  path: '/t',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -2752,6 +2758,7 @@ export interface FileRoutesByFullPath {
   '/status': typeof StatusRoute
   '/studio': typeof StudioRoute
   '/support': typeof SupportRouteWithChildren
+  '/t': typeof TRoute
   '/terms': typeof TermsRoute
   '/tour': typeof TourRoute
   '/vcard-qr': typeof VcardQrRoute
@@ -3169,6 +3176,7 @@ export interface FileRoutesByTo {
   '/sovereignty': typeof SovereigntyRoute
   '/status': typeof StatusRoute
   '/studio': typeof StudioRoute
+  '/t': typeof TRoute
   '/terms': typeof TermsRoute
   '/tour': typeof TourRoute
   '/vcard-qr': typeof VcardQrRoute
@@ -3595,6 +3603,7 @@ export interface FileRoutesById {
   '/status': typeof StatusRoute
   '/studio': typeof StudioRoute
   '/support': typeof SupportRouteWithChildren
+  '/t': typeof TRoute
   '/terms': typeof TermsRoute
   '/tour': typeof TourRoute
   '/vcard-qr': typeof VcardQrRoute
@@ -4026,6 +4035,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/studio'
     | '/support'
+    | '/t'
     | '/terms'
     | '/tour'
     | '/vcard-qr'
@@ -4443,6 +4453,7 @@ export interface FileRouteTypes {
     | '/sovereignty'
     | '/status'
     | '/studio'
+    | '/t'
     | '/terms'
     | '/tour'
     | '/vcard-qr'
@@ -4868,6 +4879,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/studio'
     | '/support'
+    | '/t'
     | '/terms'
     | '/tour'
     | '/vcard-qr'
@@ -5299,6 +5311,7 @@ export interface RootRouteChildren {
   StatusRoute: typeof StatusRoute
   StudioRoute: typeof StudioRoute
   SupportRoute: typeof SupportRouteWithChildren
+  TRoute: typeof TRoute
   TermsRoute: typeof TermsRoute
   TourRoute: typeof TourRoute
   VcardQrRoute: typeof VcardQrRoute
@@ -5850,6 +5863,13 @@ declare module '@tanstack/react-router' {
       path: '/support'
       fullPath: '/support'
       preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/t': {
+      id: '/t'
+      path: '/t'
+      fullPath: '/t'
+      preLoaderRoute: typeof TRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -9152,6 +9172,7 @@ const rootRouteChildren: RootRouteChildren = {
   StatusRoute: StatusRoute,
   StudioRoute: StudioRoute,
   SupportRoute: SupportRouteWithChildren,
+  TRoute: TRoute,
   TermsRoute: TermsRoute,
   TourRoute: TourRoute,
   VcardQrRoute: VcardQrRoute,
