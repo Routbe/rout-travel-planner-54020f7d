@@ -14,6 +14,7 @@ import { EXPLICIT_ACCOUNT_LINKING } from "@/lib/identity/link-rules";
 import { AUTH_COOKIE_ATTRIBUTES, configuredAuthOrigin , chooseAuthBaseUrl } from "@/lib/auth-origin";
 import { logServerError } from "@/lib/security/safe-errors";
 import { fediverseSession } from "@/lib/auth/fediverse-session";
+import { recoveryLoginSession } from "@/lib/auth/recovery-login-session";
 import { fetchNativeUserInfo, nativeOidcEndpoints } from "@/lib/oauth/native-endpoints";
 
 /**
@@ -176,6 +177,7 @@ export function createRoutAuth(request?: Request) {
   // Explicit linking remains unchanged; public sign-in cannot create accounts implicitly.
   const plugins: unknown[] = [
     fediverseSession(),
+    recoveryLoginSession(),
     magicLink({
       expiresIn: 60 * 15,
       // New accounts only through the passkey sign-up (consent + age checks).
