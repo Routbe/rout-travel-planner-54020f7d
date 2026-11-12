@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { requestStepUp, withStepUp } from "@/components/auth/StepUpDialog";
 import { enclave, EnclaveError } from "@/lib/crypto-enclave/client";
+import type { RecoveryCeremony } from "@/lib/crypto-enclave/recovery-mpc";
 import { ceremonyMessage as message, takeInput, takeValue } from "@/components/recovery/ceremony-ui";
 import { refreshSessionFreshness } from "@/lib/auth/step-up.functions";
 import { addPasskey } from "@/lib/webauthn.functions";
