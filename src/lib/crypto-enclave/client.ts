@@ -137,7 +137,7 @@ export function callEnclave<K extends EnclaveOp>(op: K, args: EnclaveArgs<K>, tr
   });
 }
 
-const moved = (b?: Uint8Array): Transferable[] => (b ? [b.buffer as ArrayBuffer] : []);
+const moved = (...list: (Uint8Array | undefined)[]): Transferable[] => list.filter((b): b is Uint8Array => !!b).map((b) => b.buffer as ArrayBuffer);
 
 /** Typed façade. Uint8Array arguments are transferred: the caller's copy becomes empty. */
 export const enclave = {
