@@ -566,7 +566,6 @@ export const handlers: Handlers = {
   async "ceremony.recoverLogin"({ userId, ceremony, keyId, prf, paperWords, serverShare, challenge }) {
     const ch = str(challenge, 64);
     if (!CHALLENGE_RE.test(ch)) {
-      wipeAll(prf, serverShare);
       fail("invalid_input");
     }
     return rebuildMaster({ userId, ceremony, keyId, prf, paperWords, serverShare }, async (entropy, owner) => {
