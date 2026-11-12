@@ -23,6 +23,7 @@ async function secretPepper(): Promise<string> {
   return resolved.secret;
 }
 import { canonicalAppUrl } from "@/lib/app-url";
+import { oidcIssuer } from "./native-endpoints";
 import { SUPPORTED_SCOPES } from "./scope-rules";
 import { HANDLE_RESERVATION_CLAIM, HANDLE_RESERVATION_SCOPE } from "./handle-reservation";
 import { APP_ADMIN_ROLES, APP_EDITOR_ROLES, canManageClient, type ClientActor } from "./client-access";
@@ -122,9 +123,7 @@ export function redirectAllowed(client: OAuthClient, redirectUri: string): boole
 export { isValidRedirectUri } from "./redirect-match";
 
 export function issuer(): string {
-  // Altijd absoluut (schema + host, zonder afsluitende /) zodat OIDC-clients zoals Keycloak geldige URL's bouwen.
-  const raw = (process.env["NEXT_PUBLIC_APP_URL"] || canonicalAppUrl()).trim().replace(/\/+$/, "");
-  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return oidcIssuer();
 }
 
 type Row = Record<string, unknown>;
