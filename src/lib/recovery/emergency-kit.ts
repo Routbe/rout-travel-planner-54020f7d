@@ -3,32 +3,13 @@
  * the phrase QR). Nothing is uploaded; the caller hands the Blob to a download.
  * Browser-only: import dynamically from an event handler.
  */
-import { numberedWords } from "./vault-rules";
-
 export type KitInput = {
-  kind: "phrase" | "codes";
-  /** The 24 words as one string (phrase) or the one-time codes (codes). */
+  kind: "codes";
+  /** The one-time sign-in recovery codes. */
   items: string[];
   account?: string | null;
   createdAt?: Date;
 };
-
-async function qrPng(data: string): Promise<string | null> {
-  try {
-    const { default: QRCodeStyling } = await import("qr-code-styling");
-    const qr = new QRCodeStyling({ width: 360, height: 360, type: "canvas", data, margin: 8, qrOptions: { errorCorrectionLevel: "M" }, dotsOptions: { type: "square", color: "#111111" }, backgroundOptions: { color: "#ffffff" } });
-    const blob = (await qr.getRawData("png")) as Blob | null;
-    if (!blob) return null;
-    return await new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result));
-      r.onerror = () => reject(r.error);
-      r.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
 
 export async function buildEmergencyKitPdf(input: KitInput): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
@@ -47,7 +28,7 @@ export async function buildEmergencyKitPdf(input: KitInput): Promise<Blob> {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(...soft);
-  doc.text(input.kind === "phrase" ? "Je 24 herstelwoorden voor ROUT ID" : "Je eenmalige herstelcodes voor tweestapsverificatie", M, 34);
+  doc.text("Je eenmalige herstelcodes voor tweestapsverificatie", M, 34);
   doc.text(`Gemaakt op ${date.toLocaleDateString("nl-BE")}${input.account ? `  -  ${input.account}` : ""}`, M, 40);
 
   // Warning box
@@ -57,41 +38,12 @@ export async function buildEmergencyKitPdf(input: KitInput): Promise<Blob> {
   doc.setTextColor(...ink);
   doc.setFontSize(10);
   doc.text(doc.splitTextToSize(
-    input.kind === "phrase"
-      ? "Wie deze woorden heeft, kan je hoofdsleutel herstellen. ROUT vraagt er nooit naar, ook niet via mail of telefoon. Bewaar dit blad offline, op een droge en veilige plek, en maak er geen foto van."
-      : "Elke code werkt één keer om in te loggen als je je toestel kwijt bent. ROUT vraagt er nooit naar. Bewaar dit blad offline op een veilige plek.",
+    "Elke code werkt één keer om in te loggen als je je toestel kwijt bent. ROUT vraagt er nooit naar. Bewaar dit blad offline op een veilige plek.",
     W - 2 * M - 8,
   ), M + 4, 53);
 
   let y = 80;
-  if (input.kind === "phrase") {
-    const words = numberedWords(input.items.join(" ")) ?? [];
-    const cols = 3;
-    const colW = (W - 2 * M - 52) / cols;
-    doc.setFont("courier", "normal");
-    doc.setFontSize(12);
-    words.forEach(({ n, word }, i) => {
-      const col = Math.floor(i / 8);
-      const row = i % 8;
-      const x = M + col * colW;
-      const yy = y + row * 9;
-      doc.setDrawColor(200, 200, 200);
-      doc.roundedRect(x, yy - 5.5, colW - 4, 7.5, 1.2, 1.2);
-      doc.setTextColor(...soft);
-      doc.text(String(n).padStart(2, "0"), x + 2, yy);
-      doc.setTextColor(...ink);
-      doc.text(word, x + 11, yy);
-    });
-    const qr = await qrPng(input.items.join(" "));
-    if (qr) {
-      doc.addImage(qr, "PNG", W - M - 46, y - 6, 46, 46);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(...soft);
-      doc.text(doc.splitTextToSize("Scan alleen op je eigen toestel om de woorden snel in te voeren.", 46), W - M - 46, y + 45);
-    }
-    y += 8 * 9 + 10;
-  } else {
+  {
     doc.setFont("courier", "normal");
     doc.setFontSize(13);
     input.items.forEach((code, i) => {
