@@ -9,4 +9,7 @@
 - [x] Runtime secrets for sign-in copied from Vercel
 - [x] Step 4: ROUT ID provider no longer depends on a self discovery fetch
 - [ ] Live grant drift: rout_app has broader table grants live than migrations intend (11 tables + 2 views; RLS contains them) — tidy-up migration needs owner review (waiting on user)
-- [ ] Step 3: 2-of-3 recovery ceremony — factor choice, storage and worker placement (waiting on user decisions)
+- [x] Step 3: 2-of-3 recovery ceremony (passkey + paper + ROUT) in the existing crypto worker, settings wizard, db/0242 applied live
+- [x] Purge 3-of-5 vault from code and live database (db/0243 applied live, 0 setups existed)
+- [ ] Copy ROUT_RECOVERY_FACTOR_SECRET to Vercel and deploy, so rout.be runs the new recovery (waiting on user)
+- [ ] Try the wizard with a real passkey in the preview (needs the user's own sign-in and passkey)
