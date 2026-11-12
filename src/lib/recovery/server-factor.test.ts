@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRecoveryCeremony, factorKeys, createPaperFactor } from "@/lib/crypto-enclave/recovery-mpc";
 import { isOwnServerShard, openServerShard, RecoveryFactorSecretMissingError, serverFactorPublicKey } from "./server-factor.server";
 
@@ -8,7 +8,12 @@ const BOB = "00000000-0000-4000-8000-00000000000b";
 const SECRET = "Z".repeat(64);
 
 describe("ROUT's recovery factor", () => {
-  afterEach(() => { delete process.env["ROUT_RECOVERY_FACTOR_SECRET"]; });
+  const saved = process.env["ROUT_RECOVERY_FACTOR_SECRET"];
+  beforeEach(() => { delete process.env["ROUT_RECOVERY_FACTOR_SECRET"]; });
+  afterEach(() => {
+    if (saved === undefined) delete process.env["ROUT_RECOVERY_FACTOR_SECRET"];
+    else process.env["ROUT_RECOVERY_FACTOR_SECRET"] = saved;
+  });
 
   it("refuses to work without a strong secret", () => {
     expect(() => serverFactorPublicKey(ALICE)).toThrow(RecoveryFactorSecretMissingError);

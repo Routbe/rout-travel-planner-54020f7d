@@ -52,7 +52,8 @@ export function ceremonyFromWire(w: CeremonyWire, memberId: string): RecoveryCer
   };
 }
 
-/** Pure check for the retype step: exactly the asked positions, each filled in. */
-export function wordAnswersComplete(positions: number[], answers: Record<number, string>): boolean {
-  return positions.length === 3 && positions.every((p) => (answers[p] ?? "").trim().length > 0);
+/** Number of words typed so far (for enabling a button; the words themselves are not kept). */
+export function wordCount(text: string): number {
+  const t = text.trim();
+  return t ? t.split(/\s+/).length : 0;
 }
