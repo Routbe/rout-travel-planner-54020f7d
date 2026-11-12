@@ -12,4 +12,6 @@
 - [x] Step 3: 2-of-3 recovery ceremony (passkey + paper + ROUT) in the existing crypto worker, settings wizard, db/0242 applied live
 - [x] Purge 3-of-5 vault from code and live database (db/0243 applied live, 0 setups existed)
 - [ ] Copy ROUT_RECOVERY_FACTOR_SECRET to Vercel and deploy, so rout.be runs the new recovery (waiting on user)
+- [x] Sign-in by recovery at /recovery (2 of 3, worker signs a one-time challenge, pieces wiped)
+- [ ] Apply db/0244 to the live database (waiting on user approval; the wizard's save needs it)
 - [ ] Try the wizard with a real passkey in the preview (needs the user's own sign-in and passkey)
