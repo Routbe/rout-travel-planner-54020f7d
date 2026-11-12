@@ -1762,29 +1762,15 @@ export interface PublicRateLimitsRow {
   "hits": number;
 }
 
-export interface PublicRecoveryAttemptsRow {
-  "id": string;
+export interface PublicRecoveryCeremoniesRow {
   "user_id": string;
-  "outcome": string;
-  "created_at": string | Date;
-}
-
-export interface PublicRecoverySealedShardsRow {
-  "vault_id": string;
-  "shard_index": number;
-  "slot": string;
-  "credential": string;
-  "ciphertext": string;
-  "created_at": string | Date;
-}
-
-export interface PublicRecoveryVaultsRow {
-  "user_id": string;
-  "vault_id": string;
-  "version": number;
-  "threshold": number;
+  "ceremony_id": string;
+  "key_id": string;
   "sealed_master": string;
-  "commitments": JsonValue;
+  "device_shard": string;
+  "paper_shard": string;
+  "server_shard": string;
+  "device_credential": string;
   "created_at": string | Date;
 }
 
@@ -2691,9 +2677,7 @@ export interface DbTables {
   "public.qa_trust_charges": PublicQaTrustChargesRow;
   "public.qr_scans": PublicQrScansRow;
   "public.rate_limits": PublicRateLimitsRow;
-  "public.recovery_attempts": PublicRecoveryAttemptsRow;
-  "public.recovery_sealed_shards": PublicRecoverySealedShardsRow;
-  "public.recovery_vaults": PublicRecoveryVaultsRow;
+  "public.recovery_ceremonies": PublicRecoveryCeremoniesRow;
   "public.referrals": PublicReferralsRow;
   "public.reserved_brand_releases": PublicReservedBrandReleasesRow;
   "public.reserved_brands": PublicReservedBrandsRow;
