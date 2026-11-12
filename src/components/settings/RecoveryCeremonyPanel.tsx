@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Check, FileText, Fingerprint, KeyRound, Plus, RotateCcw, Server, ShieldCheck, Trash2 } from "lucide-react";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { requestStepUp, withStepUp } from "@/components/auth/StepUpDialog";
 import { enclave, EnclaveError } from "@/lib/crypto-enclave/client";
+import { ceremonyMessage as message, takeInput, takeValue } from "@/components/recovery/ceremony-ui";
 import { refreshSessionFreshness } from "@/lib/auth/step-up.functions";
 import { addPasskey } from "@/lib/webauthn.functions";
 import { deviceLabelFrom } from "@/lib/passkey-label";
