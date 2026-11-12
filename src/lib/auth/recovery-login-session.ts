@@ -21,7 +21,11 @@ export function recoveryLoginSession() {
         const v = await ctx.context.internalAdapter.consumeVerificationValue(`${RECOVERY_CHALLENGE_PREFIX}${challenge}`);
         if (!v || new Date(v.expiresAt).getTime() <= Date.now()) throw new APIError("UNAUTHORIZED", { message: "Expired recovery" });
         const memberId = v.value;
-        const { recordSecurityEvent } = await import("@/lib/audit-log.server");
+        const { withDbContext } = await import("@/lib/neon");
+        const audit = async (eventType: string) => {
+          const { recordSecurityEvent } = await import("@/lib/audit-log.server");
+          await withDbContext({ userId: memberId, workspaceId: null }, () => recordSecurityEvent({ eventType, userId: memberId, payload: {} }));
+        };
         const found = await ceremonyForMember(memberId);
         let signature: Uint8Array;
         try {
@@ -30,7 +34,7 @@ export function recoveryLoginSession() {
           signature = new Uint8Array(0);
         }
         if (!found || !verifyRecoveryLogin(fromB64(found.loginKey), memberId, challenge, signature)) {
-          await recordSecurityEvent({ eventType: "recovery_login.failed", userId: memberId, payload: {} });
+          await audit("recovery_login.failed");
           throw new APIError("UNAUTHORIZED", { message: "Invalid recovery" });
         }
         const authId = await authIdForMember(memberId);
@@ -40,7 +44,7 @@ export function recoveryLoginSession() {
         if (!session) throw new APIError("UNAUTHORIZED", { message: "Session unavailable" });
         await setSessionCookie(ctx, { user, session });
         ctx.context.setNewSession({ user, session });
-        await recordSecurityEvent({ eventType: "recovery_login.restored", userId: memberId, payload: {} });
+        await audit("recovery_login.restored");
         return ctx.json({ ok: true });
       }),
     },
