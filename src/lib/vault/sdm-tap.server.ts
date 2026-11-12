@@ -33,7 +33,9 @@ const BATCH_MAGIC = [0x53, 0x44, 0x42, 0x31] as const; // "SDB1"
 const FLEET_BYTES = 4 + 16 + 32;
 const BATCH_BYTES = 4 + 16;
 
-type Deps = { port?: IVaultPort; kek?: VaultKek };
+/** `random` is injectable for tests that must act as the card (they need its keys). */
+type Deps = { port?: IVaultPort; kek?: VaultKek; random?: (n: number) => Uint8Array };
+const randomOf = (deps: Deps) => deps.random ?? ((n: number) => crypto.getRandomValues(new Uint8Array(n)));
 const kekOf = (deps: Deps) => (deps.kek ? { kek: deps.kek } : {});
 
 export const CardTapSchema = z
@@ -72,7 +74,7 @@ function batchMaster(plain: Uint8Array): Uint8Array {
 /** Generates a fleet key inside the server, seals it and registers it (admin). */
 export async function createSdmFleetKey(adminId: string, deps: Deps = {}): Promise<string> {
   const port = deps.port ?? vaultPort();
-  const plain = withMagic(FLEET_MAGIC, [crypto.getRandomValues(new Uint8Array(16)), crypto.getRandomValues(new Uint8Array(32))], FLEET_BYTES);
+  const plain = withMagic(FLEET_MAGIC, [randomOf(deps)(16), randomOf(deps)(32)], FLEET_BYTES);
   try {
     const ref = await sealServerToken(adminId, "sdm", SDM_FLEET_PURPOSE, plain, { port, ...kekOf(deps) });
     return await port.registerSdmFleetKey({ userId: adminId }, ref);
@@ -84,7 +86,7 @@ export async function createSdmFleetKey(adminId: string, deps: Deps = {}): Promi
 /** Generates a batch master inside the server, seals it and registers the batch (admin). */
 export async function createSdmBatch(adminId: string, fleetId: string, label: string, deps: Deps = {}): Promise<string> {
   const port = deps.port ?? vaultPort();
-  const plain = withMagic(BATCH_MAGIC, [crypto.getRandomValues(new Uint8Array(16))], BATCH_BYTES);
+  const plain = withMagic(BATCH_MAGIC, [randomOf(deps)(16)], BATCH_BYTES);
   try {
     const ref = await sealServerToken(adminId, "sdm", SDM_BATCH_PURPOSE, plain, { port, ...kekOf(deps) });
     return await port.registerSdmBatch({ userId: adminId }, fleetId, ref, label);
