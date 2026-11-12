@@ -166,6 +166,7 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
   const [error, setError] = useState<string | null>(null);
   const [needsPasskey, setNeedsPasskey] = useState(false);
   const handle = useRef<string | null>(null);
+  const sealedRef = useRef<{ ceremony: RecoveryCeremony; keyId: string; loginKey: Uint8Array; credential: string; saved: boolean } | null>(null);
 
   useEffect(() => () => {
     if (handle.current) void enclave.ceremony.discard(handle.current).catch(() => undefined);
@@ -173,6 +174,7 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
   }, []);
 
   const cancel = () => {
+    sealedRef.current = null;
     if (handle.current) void enclave.ceremony.discard(handle.current).catch(() => undefined);
     handle.current = null;
     setWords(null);
@@ -228,18 +230,35 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
     const scope = capture();
     setBusy(true); setError(null); setNeedsPasskey(false);
     try {
-      const { withPasskeyPrf } = await import("@/lib/recovery/passkey-prf");
-      const sealed = await withPasskeyPrf("ceremony", async (output, credential) => ({ credential, ...(await enclave.ceremony.sealDevice(h, output)) }));
-      scope.assertCurrent();
-      const r = await withStepUp(() => save({ data: { ceremony: ceremonyToWire(sealed.ceremony, sealed.keyId), deviceCredential: sealed.credential, loginKey: toB64(sealed.loginKey) } }));
-      if (!r.ok) throw new Error("ROUT kon zijn stuk niet controleren. Begin opnieuw.");
+      // The worker seals the device share exactly once. A retry after a failed
+      // save or confirmation reuses that sealed result (ciphertext and public
+      // keys only) instead of asking the worker to seal again, which it refuses.
+      if (!sealedRef.current) {
+        const { withPasskeyPrf } = await import("@/lib/recovery/passkey-prf");
+        sealedRef.current = await withPasskeyPrf("ceremony", async (output, credential) => ({ credential, ...(await enclave.ceremony.sealDevice(h, output)), saved: false }));
+        scope.assertCurrent();
+      }
+      const sealed = sealedRef.current;
+      if (!sealed.saved) {
+        const r = await withStepUp(() => save({ data: { ceremony: ceremonyToWire(sealed.ceremony, sealed.keyId), deviceCredential: sealed.credential, loginKey: toB64(sealed.loginKey) } }));
+        if (!r.ok) throw new Error("ROUT kon zijn stuk niet controleren. Begin opnieuw.");
+        sealed.saved = true;
+      }
       await enclave.ceremony.commit(h, userId);
       handle.current = null;
+      sealedRef.current = null;
       scope.assertCurrent();
       setStep("done");
       toast.success("Herstelkluis actief.");
     } catch (e) {
       if (!scope.isUiCurrent()) return;
+      if (e instanceof EnclaveError && e.code === "unknown_handle") {
+        handle.current = null;
+        sealedRef.current = null;
+        setStep("start");
+        setError("Deze stap is verlopen. Begin opnieuw met nieuwe woorden en gooi het vorige papier weg.");
+        return;
+      }
       const prf = e instanceof Error && (e.message === "prf_unsupported" || /NotAllowed/i.test(e.name));
       setNeedsPasskey(prf);
       setError(message(e));
