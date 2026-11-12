@@ -123,7 +123,7 @@ function Overview({ state, deviceKey, onSetup, onRestore, onChanged }: {
             onClick={async () => {
               setBusy(true);
               try {
-                await withStepUp(() => remove(), "recovery_vault");
+                await withStepUp(() => remove());
                 toast.success("Herstelkluis verwijderd. Je papieren woorden werken niet meer.");
                 onChanged();
               } catch (e) { toast.error(message(e)); } finally { setBusy(false); setConfirm(false); }
@@ -235,7 +235,7 @@ function SetupWizard({ userId, hasDeviceKey, onDone, onCancel }: { userId: strin
       const { withPasskeyPrf } = await import("@/lib/recovery/passkey-prf");
       const sealed = await withPasskeyPrf("ceremony", async (output, credential) => ({ credential, ...(await enclave.ceremony.sealDevice(h, output)) }));
       scope.assertCurrent();
-      const r = await withStepUp(() => save({ data: { ceremony: ceremonyToWire(sealed.ceremony, sealed.keyId), deviceCredential: sealed.credential } }), "recovery_vault");
+      const r = await withStepUp(() => save({ data: { ceremony: ceremonyToWire(sealed.ceremony, sealed.keyId), deviceCredential: sealed.credential } }));
       if (!r.ok) throw new Error("ROUT kon zijn stuk niet controleren. Begin opnieuw.");
       await enclave.ceremony.commit(h, userId);
       handle.current = null;
