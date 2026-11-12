@@ -77,9 +77,7 @@ export async function buildEmergencyKitPdf(input: KitInput): Promise<Blob> {
   doc.setFont("helvetica", "bold");
   doc.text("Zo gebruik je dit", M, y);
   doc.setFont("helvetica", "normal");
-  const steps = input.kind === "phrase"
-    ? ["1. Open rout.be op je nieuwe toestel en log in.", "2. Ga naar Account > Herstelkluis en kies Hoofdsleutel herstellen.", "3. Typ de 24 woorden in de juiste volgorde. Ze verlaten je toestel nooit.", "4. Maak daarna nieuwe herstelwoorden en vernietig dit blad."]
-    : ["1. Log in op rout.be met je e-mail en wachtwoord of passkey.", "2. Kies bij de tweede stap Herstelcode gebruiken.", "3. Vink de gebruikte code hierboven af.", "4. Maak nieuwe codes als je er nog maar een paar over hebt."];
+  const steps = ["1. Log in op rout.be met je e-mail en wachtwoord of passkey.", "2. Kies bij de tweede stap Herstelcode gebruiken.", "3. Vink de gebruikte code hierboven af.", "4. Maak nieuwe codes als je er nog maar een paar over hebt."];
   steps.forEach((s, i) => doc.text(s, M, y + 7 + i * 6));
 
   doc.setFontSize(8);
