@@ -1,0 +1,18 @@
+{
+  "source": "https://github.com/Routbe/rout-travel-planner",
+  "branch": "main",
+  "kind": "source-repository",
+  "permissionConfirmed": true,
+  "filesInSource": 3094,
+  "filesCopiedIdentical": 3094,
+  "excluded": [".git", "node_modules"],
+  "credentialsCopied": false,
+  "databaseMigrationsApplied": false,
+  "checks": [
+    {"route": "/", "layout": "desktop", "viewport": {"width": 1280, "height": 1800}, "trigger": "page load", "observed": "home renders, no console errors", "status": "passed"},
+    {"route": "/", "layout": "desktop", "viewport": {"width": 1280, "height": 1800}, "trigger": "Open menu", "observed": "Platform panel with Tools and Infrastructure lists", "status": "passed"},
+    {"route": "/", "layout": "phone", "viewport": {"width": 390, "height": 844}, "trigger": "page load", "observed": "home renders, no console errors", "status": "passed"},
+    {"route": "/", "layout": "phone", "viewport": {"width": 390, "height": 844}, "trigger": "Open menu", "observed": "menu opens", "status": "passed"},
+    {"route": "sign-in and account pages", "trigger": "sign-in", "observed": "server logs: no runtime database configured", "status": "blocked"}
+  ]
+}
