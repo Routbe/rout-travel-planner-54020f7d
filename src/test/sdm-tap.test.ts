@@ -169,9 +169,10 @@ describe("db/0245 permissions", () => {
   });
 
   it("keeps every tap decision on the intact hash chain", async () => {
-    const r = await db.query<{ ok: boolean }>(`
-      select bool_and(a.prev_hash = coalesce(lag(a.entry_hash) over (order by a.seq), decode(repeat('00', 32), 'hex'))) over () as ok
-        from vault_enclave.audit_logs a limit 1`);
+    const r = await db.query<{ ok: boolean; n: number }>(
+      "select vault_enclave.verify_audit_chain() as ok, (select count(*)::int from vault_enclave.audit_logs where action like 'sdm_tap_%') as n",
+    );
+    expect(r.rows[0]?.n).toBeGreaterThan(20);
     expect(r.rows[0]?.ok).toBe(true);
   });
 });
