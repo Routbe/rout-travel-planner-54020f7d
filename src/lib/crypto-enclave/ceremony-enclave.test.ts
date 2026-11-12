@@ -61,21 +61,22 @@ describe("2-of-3 ceremony in the crypto enclave", () => {
     const { ceremony, keyId, paper } = await setup(userId);
     expect((await loadDeviceKey(userId))?.keyId).toBe(keyId);
 
+    // Requests are wiped after each op (as after postMessage), so every call gets its own copy.
     const fresh = async () => forgetDeviceKey(userId);
-    const server = () => openServerShard(ceremony, userId, SECRET);
+    const server = () => openServerShard(structuredClone(ceremony), userId, SECRET);
 
     await fresh();
-    expect((await call("ceremony.restore", { userId, ceremony, keyId, paperWords: paper, serverShare: server() })).keyId).toBe(keyId);
+    expect((await call("ceremony.restore", { userId, ceremony: structuredClone(ceremony), keyId, paperWords: paper, serverShare: server() })).keyId).toBe(keyId);
     await fresh();
-    expect((await call("ceremony.restore", { userId, ceremony, keyId, prf: prfOf(5), serverShare: server() })).keyId).toBe(keyId);
+    expect((await call("ceremony.restore", { userId, ceremony: structuredClone(ceremony), keyId, prf: prfOf(5), serverShare: server() })).keyId).toBe(keyId);
     await fresh();
-    expect((await call("ceremony.restore", { userId, ceremony, keyId, prf: prfOf(5), paperWords: paper })).keyId).toBe(keyId);
+    expect((await call("ceremony.restore", { userId, ceremony: structuredClone(ceremony), keyId, prf: prfOf(5), paperWords: paper })).keyId).toBe(keyId);
     expect((await loadDeviceKey(userId))?.keyId).toBe(keyId);
 
     await fresh();
-    expect(await code("ceremony.restore", { userId, ceremony, keyId, serverShare: server() })).toBe("decrypt_failed");
-    expect(await code("ceremony.restore", { userId, ceremony, keyId, paperWords: paper })).toBe("decrypt_failed");
-    expect(await code("ceremony.restore", { userId, ceremony, keyId, prf: prfOf(6), serverShare: server() })).toBe("decrypt_failed");
+    expect(await code("ceremony.restore", { userId, ceremony: structuredClone(ceremony), keyId, serverShare: server() })).toBe("decrypt_failed");
+    expect(await code("ceremony.restore", { userId, ceremony: structuredClone(ceremony), keyId, paperWords: paper })).toBe("decrypt_failed");
+    expect(await code("ceremony.restore", { userId, ceremony: structuredClone(ceremony), keyId, prf: prfOf(6), serverShare: server() })).toBe("decrypt_failed");
     expect(await loadDeviceKey(userId)).toBeNull();
   });
 
@@ -95,7 +96,7 @@ describe("2-of-3 ceremony in the crypto enclave", () => {
     const alice = "00000000-0000-4000-8000-0000000000c5";
     const bob = "00000000-0000-4000-8000-0000000000c6";
     const { ceremony, keyId, paper } = await setup(alice);
-    expect(await code("ceremony.restore", { userId: bob, ceremony, keyId, paperWords: paper, prf: prfOf(5) })).toBe("invalid_input");
-    expect(await code("ceremony.restore", { userId: bob, ceremony: { ...ceremony, memberId: bob }, keyId, paperWords: paper, prf: prfOf(5) })).toBe("decrypt_failed");
+    expect(await code("ceremony.restore", { userId: bob, ceremony: structuredClone(ceremony), keyId, paperWords: paper, prf: prfOf(5) })).toBe("invalid_input");
+    expect(await code("ceremony.restore", { userId: bob, ceremony: { ...structuredClone(ceremony), memberId: bob }, keyId, paperWords: paper, prf: prfOf(5) })).toBe("decrypt_failed");
   });
 });
