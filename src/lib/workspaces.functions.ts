@@ -55,7 +55,7 @@ export const setActiveWorkspace = createServerFn({ method: "POST" })
   });
 
 /** Own uploads only: the app's avatar route or an https storage URL. */
-const logoUrl = z.string().max(500).refine((u) => /^\/api\/public\/avatar\?path=[0-9a-f-]{36}%2F[A-Za-z0-9._-]+$/.test(u) || /^https:\/\/[^\s"'<>]+$/.test(u));
+const logoUrl = z.string().max(500).refine(isWorkspaceLogoUrl);
 
 /** Owners/admins/editors change the workspace icon or logo. */
 export const setWorkspaceIcon = createServerFn({ method: "POST" })

@@ -1,7 +1,7 @@
 import { sql } from "@/lib/neon";
 import type { DraftMeta } from "./profile-drafts.server";
 import { readHub } from "./workspace-hub";
-import { seedWorkspaceStudio, type WorkspaceStudioPayload } from "./workspace-studio";
+import { WORKSPACE_LOGO_MAX, WORKSPACE_LOGO_PATTERNS, seedWorkspaceStudio, type WorkspaceStudioPayload } from "./workspace-studio";
 import type { WorkspaceRole } from "./workspace-rules";
 
 /**
@@ -132,12 +132,22 @@ export async function publishWorkspaceDraft(workspaceId: string, expectedRevisio
        ), w as (
          update public.workspaces
             set public_profile = coalesce(public_profile, '{}'::jsonb)
-                  || jsonb_build_object('published', true, 'studio', (select payload from d))
+                  || jsonb_build_object('published', true, 'studio', (select payload from d)),
+                -- The published Studio photo is the workspace logo everywhere
+                -- (switcher, hub, cards); same rule as workspaceLogoAfterPublish.
+                avatar_url = (
+                  select case
+                    when nullif(btrim(coalesce(d.payload->>'avatarUrl', '')), '') is null then null
+                    when char_length(btrim(d.payload->>'avatarUrl')) <= $5
+                         and (btrim(d.payload->>'avatarUrl') ~ $3 or btrim(d.payload->>'avatarUrl') ~ $4)
+                      then btrim(d.payload->>'avatarUrl')
+                    else public.workspaces.avatar_url
+                  end from d)
           where id = $1::uuid and exists (select 1 from d)
           returning id
        )
        select d.revision, d.published_revision, d.updated_at, d.published_at, (select count(*) from w) as written from d`,
-      [workspaceId, expectedRevision],
+      [workspaceId, expectedRevision, WORKSPACE_LOGO_PATTERNS[0], WORKSPACE_LOGO_PATTERNS[1], WORKSPACE_LOGO_MAX],
     )) as Row[];
     const row = rows[0];
     if (!row) throw new Error("draft_conflict");
