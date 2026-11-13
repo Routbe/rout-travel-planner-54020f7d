@@ -98,3 +98,15 @@ export function parseOpaqueToken<K extends OpaqueTokenKind>(value: unknown, kind
   if (!isOpaqueToken(value, kind)) throw new OpaqueTokenError();
   return value;
 }
+
+declare const tapGrantBrand: unique symbol;
+/**
+ * A single-use tap grant (db/0245): `tap_<64 lowercase hex>`, minted by the
+ * database after a verified ROUT Card tap, valid 120 s for one purpose. It is
+ * not a vault token (it seals nothing), so it is not one of OPAQUE_TOKEN_KINDS.
+ */
+export type TapGrant = `tap_${string}` & { readonly [tapGrantBrand]: true };
+const TAP_GRANT_RE = /^tap_[0-9a-f]{64}$/;
+export function isTapGrant(value: unknown): value is TapGrant {
+  return matches(value, TAP_GRANT_RE);
+}

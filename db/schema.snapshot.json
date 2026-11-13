@@ -26762,7 +26762,7 @@
         {
           "name": "audit_logs_action_check",
           "kind": "c",
-          "def": "CHECK ((action = ANY (ARRAY['step_up_register'::text, 'token_store'::text, 'token_retrieve'::text, 'server_key_register'::text, 'sdm_card_register'::text, 'sdm_recovery_retrieve'::text, 'sdm_recovery_confirm'::text])))"
+          "def": "CHECK ((action = ANY (ARRAY['step_up_register'::text, 'token_store'::text, 'token_retrieve'::text, 'server_key_register'::text, 'sdm_card_register'::text, 'sdm_recovery_retrieve'::text, 'sdm_recovery_confirm'::text, 'sdm_fleet_register'::text, 'sdm_batch_register'::text, 'sdm_batch_cards_register'::text, 'sdm_tap_begin'::text, 'sdm_tap_confirm'::text, 'sdm_tap_consume'::text])))"
         },
         {
           "name": "audit_logs_entry_hash_key",
@@ -26901,6 +26901,243 @@
     },
     {
       "schema": "vault_enclave",
+      "name": "sdm_batch_cards",
+      "columns": [
+        {
+          "name": "card_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": "gen_random_uuid()",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "batch_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "uid_hash",
+          "type": "bytea",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "activation_hash",
+          "type": "bytea",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "owner_user_id",
+          "type": "uuid",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "last_counter",
+          "type": "integer",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": "clock_timestamp()",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "activated_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "sdm_batch_cards_activation_len",
+          "kind": "c",
+          "def": "CHECK (((activation_hash IS NULL) OR (octet_length(activation_hash) = 32)))"
+        },
+        {
+          "name": "sdm_batch_cards_batch_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (batch_id) REFERENCES vault_enclave.sdm_batches(batch_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "sdm_batch_cards_counter_range",
+          "kind": "c",
+          "def": "CHECK (((last_counter IS NULL) OR ((last_counter >= 0) AND (last_counter <= 16777214))))"
+        },
+        {
+          "name": "sdm_batch_cards_owner_user_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL"
+        },
+        {
+          "name": "sdm_batch_cards_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (card_id)"
+        },
+        {
+          "name": "sdm_batch_cards_uid_hash_key",
+          "kind": "u",
+          "def": "UNIQUE (uid_hash)"
+        },
+        {
+          "name": "sdm_batch_cards_uid_hash_len",
+          "kind": "c",
+          "def": "CHECK ((octet_length(uid_hash) = 32))"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX sdm_batch_cards_batch_idx ON vault_enclave.sdm_batch_cards USING btree (batch_id)",
+        "CREATE INDEX sdm_batch_cards_owner_idx ON vault_enclave.sdm_batch_cards USING btree (owner_user_id)"
+      ],
+      "triggers": [],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "sdm_batches",
+      "columns": [
+        {
+          "name": "batch_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": "gen_random_uuid()",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "fleet_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "owner_user_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "sdm_ref",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": "clock_timestamp()",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "exported_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "retired_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "sdm_batches_fleet_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (fleet_id) REFERENCES vault_enclave.sdm_fleet_keys(fleet_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "sdm_batches_label",
+          "kind": "c",
+          "def": "CHECK (((char_length(label) >= 1) AND (char_length(label) <= 80)))"
+        },
+        {
+          "name": "sdm_batches_owner_user_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "sdm_batches_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (batch_id)"
+        },
+        {
+          "name": "sdm_batches_ref_kind",
+          "kind": "c",
+          "def": "CHECK ((\"left\"(sdm_ref, 4) = 'sdm_'::text))"
+        },
+        {
+          "name": "sdm_batches_sdm_ref_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (sdm_ref) REFERENCES vault_enclave.opaque_tokens(token_ref) ON DELETE RESTRICT"
+        },
+        {
+          "name": "sdm_batches_sdm_ref_key",
+          "kind": "u",
+          "def": "UNIQUE (sdm_ref)"
+        }
+      ],
+      "indexes": [],
+      "triggers": [],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
       "name": "sdm_cards",
       "columns": [
         {
@@ -26987,6 +27224,85 @@
       "indexes": [
         "CREATE INDEX sdm_cards_owner_idx ON vault_enclave.sdm_cards USING btree (owner_user_id)"
       ],
+      "triggers": [],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "sdm_fleet_keys",
+      "columns": [
+        {
+          "name": "fleet_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": "gen_random_uuid()",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "owner_user_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "sdm_ref",
+          "type": "text",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": "clock_timestamp()",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "retired_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "sdm_fleet_keys_owner_user_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "sdm_fleet_keys_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (fleet_id)"
+        },
+        {
+          "name": "sdm_fleet_keys_sdm_ref_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (sdm_ref) REFERENCES vault_enclave.opaque_tokens(token_ref) ON DELETE RESTRICT"
+        },
+        {
+          "name": "sdm_fleet_keys_sdm_ref_key",
+          "kind": "u",
+          "def": "UNIQUE (sdm_ref)"
+        },
+        {
+          "name": "sdm_fleet_ref_kind",
+          "kind": "c",
+          "def": "CHECK ((\"left\"(sdm_ref, 4) = 'sdm_'::text))"
+        }
+      ],
+      "indexes": [],
       "triggers": [],
       "rls": true,
       "forceRls": false,
@@ -27087,6 +27403,182 @@
       "indexes": [
         "CREATE INDEX sdm_attempts_card_idx ON vault_enclave.sdm_recovery_attempts USING btree (card_id, started_at)",
         "CREATE INDEX sdm_attempts_owner_idx ON vault_enclave.sdm_recovery_attempts USING btree (owner_user_id, started_at)"
+      ],
+      "triggers": [],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "sdm_tap_attempts",
+      "columns": [
+        {
+          "name": "attempt_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": "gen_random_uuid()",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "card_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "tap_digest",
+          "type": "bytea",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "notNull": true,
+          "default": "'pending'::text",
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "closed_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "read_counter",
+          "type": "integer",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "sdm_tap_attempts_card_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (card_id) REFERENCES vault_enclave.sdm_batch_cards(card_id) ON DELETE CASCADE"
+        },
+        {
+          "name": "sdm_tap_attempts_digest_len",
+          "kind": "c",
+          "def": "CHECK ((octet_length(tap_digest) = 32))"
+        },
+        {
+          "name": "sdm_tap_attempts_outcome",
+          "kind": "c",
+          "def": "CHECK ((outcome = ANY (ARRAY['pending'::text, 'verified'::text, 'failed'::text])))"
+        },
+        {
+          "name": "sdm_tap_attempts_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (attempt_id)"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX sdm_tap_attempts_card_idx ON vault_enclave.sdm_tap_attempts USING btree (card_id, started_at)"
+      ],
+      "triggers": [],
+      "rls": true,
+      "forceRls": false,
+      "policies": [],
+      "grants": {}
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "sdm_tap_grants",
+      "columns": [
+        {
+          "name": "grant_digest",
+          "type": "bytea",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "card_id",
+          "type": "uuid",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        },
+        {
+          "name": "consumed_for",
+          "type": "text",
+          "notNull": false,
+          "default": null,
+          "identity": null,
+          "generated": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "sdm_tap_grants_card_id_fkey",
+          "kind": "f",
+          "def": "FOREIGN KEY (card_id) REFERENCES vault_enclave.sdm_batch_cards(card_id) ON DELETE CASCADE"
+        },
+        {
+          "name": "sdm_tap_grants_digest_len",
+          "kind": "c",
+          "def": "CHECK ((octet_length(grant_digest) = 32))"
+        },
+        {
+          "name": "sdm_tap_grants_pkey",
+          "kind": "p",
+          "def": "PRIMARY KEY (grant_digest)"
+        },
+        {
+          "name": "sdm_tap_grants_purpose",
+          "kind": "c",
+          "def": "CHECK (((consumed_for IS NULL) OR (consumed_for = ANY (ARRAY['public_proof'::text, 'step_up'::text]))))"
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX sdm_tap_grants_card_idx ON vault_enclave.sdm_tap_grants USING btree (card_id, created_at)"
       ],
       "triggers": [],
       "rls": true,
@@ -29526,6 +30018,12 @@
     },
     {
       "schema": "vault_enclave",
+      "name": "begin_sdm_tap",
+      "args": "p_fleet_id uuid, p_uid_hash bytea, p_picc_data bytea, p_cmac bytea",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.begin_sdm_tap(p_fleet_id uuid, p_uid_hash bytea, p_picc_data bytea, p_cmac bytea)\n RETURNS TABLE(granted boolean, attempt_id uuid, batch_id uuid, batch_owner uuid, encrypted_payload bytea, last_counter integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  v_now timestamptz := pg_catalog.clock_timestamp();\n  v_card vault_enclave.sdm_batch_cards%rowtype;\n  v_batch vault_enclave.sdm_batches%rowtype;\n  v_failures int;\n  v_attempt uuid;\n  v_payload bytea;\nbegin\n  if p_uid_hash is null or octet_length(p_uid_hash) <> 32\n     or p_picc_data is null or octet_length(p_picc_data) <> 16 or p_cmac is null or octet_length(p_cmac) <> 8 then\n    perform vault_enclave.append_audit(null, 'sdm_tap_begin', 'denied', 'malformed_tap', null);\n    return query select false, null::uuid, null::uuid, null::uuid, null::bytea, null::integer; return;\n  end if;\n  select c.* into v_card from vault_enclave.sdm_batch_cards c\n    join vault_enclave.sdm_batches b on b.batch_id = c.batch_id\n   where c.uid_hash = p_uid_hash and b.fleet_id = p_fleet_id\n   for update of c;\n  if not found or v_card.revoked_at is not null then\n    perform vault_enclave.append_audit(null, 'sdm_tap_begin', 'denied', case when found then 'card_revoked' else 'unknown_card' end, null);\n    return query select false, null::uuid, null::uuid, null::uuid, null::bytea, null::integer; return;\n  end if;\n  select * into v_batch from vault_enclave.sdm_batches b where b.batch_id = v_card.batch_id;\n  if v_batch.retired_at is not null then\n    perform vault_enclave.append_audit(null, 'sdm_tap_begin', 'denied', 'batch_retired', v_batch.sdm_ref);\n    return query select false, null::uuid, null::uuid, null::uuid, null::bytea, null::integer; return;\n  end if;\n  -- Serialise taps of one card so parallel requests cannot all pass the lockout.\n  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_card.card_id::text, 7421003245));\n  delete from vault_enclave.sdm_tap_attempts a where a.card_id = v_card.card_id and a.started_at < v_now - interval '1 day';\n  delete from vault_enclave.sdm_tap_grants g where g.card_id = v_card.card_id and g.expires_at < v_now - interval '1 day';\n  select count(*)::int into v_failures from vault_enclave.sdm_tap_attempts a\n   where a.card_id = v_card.card_id and a.outcome <> 'verified' and a.started_at > v_now - interval '10 minutes';\n  if v_failures >= 5 then\n    perform vault_enclave.append_audit(v_card.owner_user_id, 'sdm_tap_begin', 'denied', 'card_locked', v_batch.sdm_ref);\n    return query select false, null::uuid, null::uuid, null::uuid, null::bytea, null::integer; return;\n  end if;\n  select t.encrypted_payload into v_payload from vault_enclave.opaque_tokens t\n   where t.token_ref = v_batch.sdm_ref and t.owner_user_id = v_batch.owner_user_id and t.token_type = 'sdm';\n  if not found then\n    perform vault_enclave.append_audit(v_card.owner_user_id, 'sdm_tap_begin', 'denied', 'envelope_missing', v_batch.sdm_ref);\n    return query select false, null::uuid, null::uuid, null::uuid, null::bytea, null::integer; return;\n  end if;\n  insert into vault_enclave.sdm_tap_attempts (card_id, tap_digest, started_at)\n  values (v_card.card_id, pg_catalog.sha256(p_picc_data || p_cmac), v_now)\n  returning sdm_tap_attempts.attempt_id into v_attempt;\n  perform vault_enclave.append_audit(v_card.owner_user_id, 'sdm_tap_begin', 'granted', 'pending', v_batch.sdm_ref);\n  return query select true, v_attempt, v_batch.batch_id, v_batch.owner_user_id, v_payload, v_card.last_counter;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
       "name": "caller_user_id",
       "args": "",
       "def": "CREATE OR REPLACE FUNCTION vault_enclave.caller_user_id()\n RETURNS uuid\n LANGUAGE plpgsql\n STABLE\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare v text := pg_catalog.current_setting('rout.current_user_id', true);\nbegin\n  if v is null or v !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then return null; end if;\n  return v::uuid;\nend $function$"
@@ -29538,9 +30036,39 @@
     },
     {
       "schema": "vault_enclave",
+      "name": "confirm_sdm_tap",
+      "args": "p_attempt_id uuid, p_picc_data bytea, p_cmac bytea, p_verified boolean, p_read_counter integer",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.confirm_sdm_tap(p_attempt_id uuid, p_picc_data bytea, p_cmac bytea, p_verified boolean, p_read_counter integer)\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  v_now timestamptz := pg_catalog.clock_timestamp();\n  v_attempt vault_enclave.sdm_tap_attempts%rowtype;\n  v_owner uuid;\n  v_rows int;\n  v_grant text;\nbegin\n  select * into v_attempt from vault_enclave.sdm_tap_attempts a where a.attempt_id = p_attempt_id for update;\n  if not found or v_attempt.outcome <> 'pending' then\n    perform vault_enclave.append_audit(null, 'sdm_tap_confirm', 'denied', 'attempt_not_pending', null);\n    return null;\n  end if;\n  select c.owner_user_id into v_owner from vault_enclave.sdm_batch_cards c where c.card_id = v_attempt.card_id;\n  if p_verified is distinct from true\n     or v_now - v_attempt.started_at > interval '60 seconds'\n     or p_picc_data is null or p_cmac is null\n     or pg_catalog.sha256(p_picc_data || p_cmac) <> v_attempt.tap_digest\n     or p_read_counter is null or p_read_counter not between 0 and 16777214 then\n    update vault_enclave.sdm_tap_attempts set outcome = 'failed', closed_at = v_now where attempt_id = v_attempt.attempt_id;\n    perform vault_enclave.append_audit(v_owner, 'sdm_tap_confirm', 'denied',\n      case when p_verified is distinct from true then 'cmac_invalid'\n           when v_now - v_attempt.started_at > interval '60 seconds' then 'attempt_expired'\n           when p_read_counter is null or p_read_counter not between 0 and 16777214 then 'bad_counter'\n           else 'tap_mismatch' end, null);\n    return null;\n  end if;\n  update vault_enclave.sdm_batch_cards c set last_counter = p_read_counter\n   where c.card_id = v_attempt.card_id and c.revoked_at is null\n     and (c.last_counter is null or c.last_counter < p_read_counter);\n  get diagnostics v_rows = row_count;\n  if v_rows = 0 then\n    update vault_enclave.sdm_tap_attempts set outcome = 'failed', closed_at = v_now where attempt_id = v_attempt.attempt_id;\n    perform vault_enclave.append_audit(v_owner, 'sdm_tap_confirm', 'denied', 'replayed', null);\n    return null;\n  end if;\n  update vault_enclave.sdm_tap_attempts set outcome = 'verified', closed_at = v_now, read_counter = p_read_counter\n   where attempt_id = v_attempt.attempt_id;\n  v_grant := 'tap_' || pg_catalog.encode(public.gen_random_bytes(32), 'hex');\n  insert into vault_enclave.sdm_tap_grants (grant_digest, card_id, created_at, expires_at)\n  values (pg_catalog.sha256(pg_catalog.convert_to(v_grant, 'UTF8')), v_attempt.card_id, v_now, v_now + interval '120 seconds');\n  perform vault_enclave.append_audit(v_owner, 'sdm_tap_confirm', 'granted', 'ok', null);\n  return v_grant;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "consume_sdm_tap",
+      "args": "p_tap_ref text, p_purpose text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.consume_sdm_tap(p_tap_ref text, p_purpose text)\n RETURNS TABLE(granted boolean, card_state text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  v_now timestamptz := pg_catalog.clock_timestamp();\n  v_caller uuid := vault_enclave.caller_user_id();\n  v_grant vault_enclave.sdm_tap_grants%rowtype;\n  v_card vault_enclave.sdm_batch_cards%rowtype;\nbegin\n  if p_tap_ref is null or p_tap_ref !~ '^tap_[0-9a-f]{64}$' or p_purpose not in ('public_proof', 'step_up') then\n    perform vault_enclave.append_audit(v_caller, 'sdm_tap_consume', 'denied', 'bad_request', null);\n    return query select false, null::text; return;\n  end if;\n  select * into v_grant from vault_enclave.sdm_tap_grants g\n   where g.grant_digest = pg_catalog.sha256(pg_catalog.convert_to(p_tap_ref, 'UTF8')) for update;\n  if not found or v_grant.consumed_at is not null or v_grant.expires_at < v_now then\n    perform vault_enclave.append_audit(v_caller, 'sdm_tap_consume', 'denied',\n      case when not found then 'unknown_grant' when v_grant.consumed_at is not null then 'grant_spent' else 'grant_expired' end, null);\n    return query select false, null::text; return;\n  end if;\n  select * into v_card from vault_enclave.sdm_batch_cards c where c.card_id = v_grant.card_id;\n  if v_card.revoked_at is not null or (p_purpose = 'step_up' and (v_caller is null or v_card.owner_user_id is distinct from v_caller)) then\n    update vault_enclave.sdm_tap_grants set consumed_at = v_now, consumed_for = p_purpose where grant_digest = v_grant.grant_digest;\n    perform vault_enclave.append_audit(v_caller, 'sdm_tap_consume', 'denied',\n      case when v_card.revoked_at is not null then 'card_revoked' else 'not_card_owner' end, null);\n    return query select false, null::text; return;\n  end if;\n  update vault_enclave.sdm_tap_grants set consumed_at = v_now, consumed_for = p_purpose where grant_digest = v_grant.grant_digest;\n  perform vault_enclave.append_audit(v_caller, 'sdm_tap_consume', 'granted', p_purpose, null);\n  return query select true, case when v_card.owner_user_id is null then 'unactivated' else 'active' end;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "register_sdm_batch",
+      "args": "p_fleet_id uuid, p_sdm_ref text, p_label text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.register_sdm_batch(p_fleet_id uuid, p_sdm_ref text, p_label text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v_ref text := case when p_sdm_ref ~ '^sdm_[0-9a-f]{64}$' then p_sdm_ref end;\n  v_label text := pg_catalog.btrim(coalesce(p_label, ''));\n  v_id uuid;\nbegin\n  if v_caller is null or not public.rout_is_admin_member(v_caller) then\n    perform vault_enclave.append_audit(v_caller, 'sdm_batch_register', 'denied', 'not_admin', v_ref); return null;\n  end if;\n  if not exists (select 1 from vault_enclave.sdm_fleet_keys f where f.fleet_id = p_fleet_id and f.retired_at is null)\n     or char_length(v_label) not between 1 and 80\n     or v_ref is null or not exists (\n       select 1 from vault_enclave.opaque_tokens t where t.token_ref = v_ref and t.owner_user_id = v_caller and t.token_type = 'sdm')\n     or not vault_enclave.sdm_ref_free(v_ref) then\n    perform vault_enclave.append_audit(v_caller, 'sdm_batch_register', 'denied', 'bad_request', v_ref); return null;\n  end if;\n  insert into vault_enclave.sdm_batches (fleet_id, owner_user_id, sdm_ref, label)\n  values (p_fleet_id, v_caller, v_ref, v_label) returning batch_id into v_id;\n  perform vault_enclave.append_audit(v_caller, 'sdm_batch_register', 'granted', 'ok', v_ref);\n  return v_id;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "register_sdm_batch_cards",
+      "args": "p_batch_id uuid, p_uid_hashes bytea[], p_activation_hashes bytea[]",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.register_sdm_batch_cards(p_batch_id uuid, p_uid_hashes bytea[], p_activation_hashes bytea[])\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v_batch vault_enclave.sdm_batches%rowtype;\n  v_n int := coalesce(pg_catalog.array_length(p_uid_hashes, 1), 0);\n  v_rows int;\nbegin\n  select * into v_batch from vault_enclave.sdm_batches b where b.batch_id = p_batch_id for update;\n  if v_caller is null or not public.rout_is_admin_member(v_caller) or not found\n     or v_batch.owner_user_id <> v_caller or v_batch.retired_at is not null then\n    perform vault_enclave.append_audit(v_caller, 'sdm_batch_cards_register', 'denied', 'not_batch_owner', v_batch.sdm_ref); return null;\n  end if;\n  if v_n not between 1 and 5000\n     or (p_activation_hashes is not null and coalesce(pg_catalog.array_length(p_activation_hashes, 1), 0) <> v_n)\n     or exists (select 1 from pg_catalog.unnest(p_uid_hashes) h where h is null or octet_length(h) <> 32)\n     or exists (select 1 from pg_catalog.unnest(p_activation_hashes) h where h is not null and octet_length(h) <> 32) then\n    perform vault_enclave.append_audit(v_caller, 'sdm_batch_cards_register', 'denied', 'bad_manifest', v_batch.sdm_ref); return null;\n  end if;\n  insert into vault_enclave.sdm_batch_cards (batch_id, uid_hash, activation_hash)\n  select v_batch.batch_id, u.h, a.h\n    from pg_catalog.unnest(p_uid_hashes) with ordinality u(h, i)\n    left join pg_catalog.unnest(p_activation_hashes) with ordinality a(h, i) on a.i = u.i\n  on conflict (uid_hash) do nothing;\n  get diagnostics v_rows = row_count;\n  perform vault_enclave.append_audit(v_caller, 'sdm_batch_cards_register', 'granted', 'imported_' || v_rows, v_batch.sdm_ref);\n  return v_rows;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
       "name": "register_sdm_card",
       "args": "p_sdm_ref text",
       "def": "CREATE OR REPLACE FUNCTION vault_enclave.register_sdm_card(p_sdm_ref text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v_ref text := case when p_sdm_ref ~ '^sdm_[0-9a-f]{64}$' then p_sdm_ref end;\n  v_card uuid;\nbegin\n  if v_caller is null then\n    perform vault_enclave.append_audit(null, 'sdm_card_register', 'denied', 'no_caller', v_ref); return null;\n  end if;\n  if v_ref is null or not exists (\n       select 1 from vault_enclave.opaque_tokens t where t.token_ref = v_ref and t.owner_user_id = v_caller and t.token_type = 'sdm') then\n    perform vault_enclave.append_audit(v_caller, 'sdm_card_register', 'denied', 'not_owned_sdm', v_ref); return null;\n  end if;\n  if exists (select 1 from vault_enclave.sdm_cards c where c.sdm_ref = v_ref) then\n    perform vault_enclave.append_audit(v_caller, 'sdm_card_register', 'denied', 'already_linked', v_ref); return null;\n  end if;\n  insert into vault_enclave.sdm_cards (owner_user_id, sdm_ref) values (v_caller, v_ref) returning card_id into v_card;\n  perform vault_enclave.append_audit(v_caller, 'sdm_card_register', 'granted', 'ok', v_ref);\n  return v_card;\nend $function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "register_sdm_fleet_key",
+      "args": "p_sdm_ref text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.register_sdm_fleet_key(p_sdm_ref text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  v_caller uuid := vault_enclave.caller_user_id();\n  v_ref text := case when p_sdm_ref ~ '^sdm_[0-9a-f]{64}$' then p_sdm_ref end;\n  v_id uuid;\nbegin\n  if v_caller is null or not public.rout_is_admin_member(v_caller) then\n    perform vault_enclave.append_audit(v_caller, 'sdm_fleet_register', 'denied', 'not_admin', v_ref); return null;\n  end if;\n  if v_ref is null or not exists (\n       select 1 from vault_enclave.opaque_tokens t where t.token_ref = v_ref and t.owner_user_id = v_caller and t.token_type = 'sdm')\n     or not vault_enclave.sdm_ref_free(v_ref) then\n    perform vault_enclave.append_audit(v_caller, 'sdm_fleet_register', 'denied', 'ref_unusable', v_ref); return null;\n  end if;\n  insert into vault_enclave.sdm_fleet_keys (owner_user_id, sdm_ref) values (v_caller, v_ref) returning fleet_id into v_id;\n  perform vault_enclave.append_audit(v_caller, 'sdm_fleet_register', 'granted', 'ok', v_ref);\n  return v_id;\nend $function$"
     },
     {
       "schema": "vault_enclave",
@@ -29571,6 +30099,18 @@
       "name": "sdm_failures",
       "args": "p_card uuid, p_owner uuid, p_now timestamp with time zone",
       "def": "CREATE OR REPLACE FUNCTION vault_enclave.sdm_failures(p_card uuid, p_owner uuid, p_now timestamp with time zone)\n RETURNS TABLE(card_failures integer, owner_failures integer)\n LANGUAGE sql\n STABLE\n SET search_path TO 'pg_catalog'\nAS $function$\n  select\n    (select count(*)::int from vault_enclave.sdm_recovery_attempts a\n      where a.card_id = p_card and a.outcome <> 'verified' and a.started_at > p_now - interval '10 minutes'),\n    (select count(*)::int from vault_enclave.sdm_recovery_attempts a\n      where a.owner_user_id = p_owner and a.outcome <> 'verified' and a.started_at > p_now - interval '10 minutes')\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "sdm_ref_free",
+      "args": "p_ref text",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.sdm_ref_free(p_ref text)\n RETURNS boolean\n LANGUAGE sql\n STABLE\n SET search_path TO 'pg_catalog'\nAS $function$\n  select not exists (select 1 from vault_enclave.sdm_cards c where c.sdm_ref = p_ref)\n     and not exists (select 1 from vault_enclave.sdm_fleet_keys f where f.sdm_ref = p_ref)\n     and not exists (select 1 from vault_enclave.sdm_batches b where b.sdm_ref = p_ref)\n$function$"
+    },
+    {
+      "schema": "vault_enclave",
+      "name": "sdm_tap_fleet_keys",
+      "args": "",
+      "def": "CREATE OR REPLACE FUNCTION vault_enclave.sdm_tap_fleet_keys()\n RETURNS TABLE(fleet_id uuid, owner_user_id uuid, encrypted_payload bytea)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\n  select f.fleet_id, f.owner_user_id, t.encrypted_payload\n    from vault_enclave.sdm_fleet_keys f\n    join vault_enclave.opaque_tokens t on t.token_ref = f.sdm_ref and t.owner_user_id = f.owner_user_id and t.token_type = 'sdm'\n   where f.retired_at is null\n   order by f.created_at desc\n   limit 4\n$function$"
     },
     {
       "schema": "vault_enclave",

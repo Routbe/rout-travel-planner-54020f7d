@@ -1,6 +1,6 @@
 import { cbc, cmac } from "@noble/ciphers/aes.js";
 import { describe, expect, it } from "vitest";
-import { SdmError, verifySdmTap, type SdmFailure } from "./sdm-verifier";
+import { cardDivInput, constantTimeEqual, decryptPiccData, diversifyAes128, SdmError, uidIndex, verifySdmTap, type SdmFailure } from "./sdm-verifier";
 
 const zeroKeys = { metaReadKey: new Uint8Array(16), fileReadKey: new Uint8Array(16) };
 // NXP AN12196 "SUN with encrypted PICCData" example (all-zero factory keys).
@@ -75,5 +75,48 @@ describe("NTAG 424 DNA SUN verification", () => {
     const uid = [0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
     expect(verifySdmTap({ tap: simulateTap(keys, uid, 5), keys, lastCounter: 4 })).toEqual({ uid: "04112233445566", readCounter: 5 });
     expect(reason(() => verifySdmTap({ tap: simulateTap(keys, uid, 0xffffff), keys, lastCounter: 4 }))).toBe("counter_exhausted");
+  });
+});
+
+describe("AN10922 key diversification and card lookup", () => {
+  const h = (s: string) => Uint8Array.from(s.match(/../g) ?? [], (x) => Number.parseInt(x, 16));
+  const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("").toUpperCase();
+
+  it("matches NXP's AN10922 AES-128 example", () => {
+    // Master key, UID 04782E21801D80 || AID 3042F5 || system id "NXP Abu".
+    const k = diversifyAes128(h("00112233445566778899AABBCCDDEEFF"), h("04782E21801D803042F54E585020416275"));
+    expect(hex(k)).toBe("A8DD63A3B89D54B37CA802473FDA9175");
+  });
+
+  it("gives every card its own key and refuses inputs outside AN10922's length", () => {
+    const master = new Uint8Array(16).fill(7);
+    const batch = new Uint8Array(16).fill(9);
+    const a = diversifyAes128(master, cardDivInput(h("04112233445566"), batch));
+    const b = diversifyAes128(master, cardDivInput(h("04112233445567"), batch));
+    expect(hex(a)).not.toBe(hex(b));
+    expect(() => diversifyAes128(master, new Uint8Array(15))).toThrow(TypeError);
+    expect(() => diversifyAes128(master, new Uint8Array(32))).toThrow(TypeError);
+  });
+
+  it("reads UID and counter from NXP's PICCData, and rejects garbage", () => {
+    const r = decryptPiccData(new Uint8Array(16), nxp.piccData);
+    expect(r && hex(r.uid)).toBe("04DE5F1EACC040");
+    expect(r?.readCounter).toBe(61);
+    expect(decryptPiccData(new Uint8Array(16).fill(3), nxp.piccData)).toBeNull();
+    expect(decryptPiccData(new Uint8Array(16), "zz")).toBeNull();
+  });
+
+  it("indexes a card by a keyed hash, never by the UID itself", () => {
+    const uid = h("04DE5F1EACC040");
+    const i1 = uidIndex(new Uint8Array(32).fill(1), uid);
+    expect(i1).toHaveLength(32);
+    expect(hex(i1)).not.toContain("04DE5F1EACC040");
+    expect(hex(uidIndex(new Uint8Array(32).fill(2), uid))).not.toBe(hex(i1));
+  });
+
+  it("compares bytes in constant time", () => {
+    expect(constantTimeEqual(h("0102"), h("0102"))).toBe(true);
+    expect(constantTimeEqual(h("0102"), h("0103"))).toBe(false);
+    expect(constantTimeEqual(h("01"), h("0102"))).toBe(false);
   });
 });

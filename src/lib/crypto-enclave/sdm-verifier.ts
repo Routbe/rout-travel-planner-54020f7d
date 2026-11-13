@@ -19,6 +19,8 @@
  * audit log only and must not be shown to the tapping device.
  */
 import { cbc, cmac } from "@noble/ciphers/aes.js";
+import { hmac } from "@noble/hashes/hmac.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 export type SdmKeys = {
   /** SDMMetaReadKey: decrypts PICCData. 16 bytes. */
@@ -65,7 +67,8 @@ function toHex(bytes: Uint8Array): string {
   return s.toUpperCase();
 }
 
-function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+/** Constant-time byte comparison (length is not secret). */
+export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   let d = 0;
   for (let i = 0; i < a.length; i++) d |= (a[i] ?? 0) ^ (b[i] ?? 0);
@@ -136,5 +139,73 @@ export function verifySdmTap(input: {
     sv2?.fill(0);
     sessionKey?.fill(0);
     full?.fill(0);
+  }
+}
+
+/**
+ * NXP AN10922 AES-128 key diversification:
+ *   K' = AES-CMAC(K, 0x01 || M), with 16 <= |M| <= 31 bytes.
+ * For that length the standard CMAC padding (0x80 00.., subkey K2, or K1 at
+ * exactly 32 bytes) is the AN10922 padding to two blocks, so noble's CMAC is
+ * used as is. The caller wipes the returned key.
+ */
+export function diversifyAes128(masterKey: Uint8Array, divInput: Uint8Array): Uint8Array {
+  checkKey(masterKey);
+  if (!(divInput instanceof Uint8Array) || divInput.length < 16 || divInput.length > 31) throw new TypeError("sdm_div_input_length");
+  const d = new Uint8Array(1 + divInput.length);
+  d[0] = 0x01;
+  d.set(divInput, 1);
+  try {
+    return cmac(d, masterKey);
+  } finally {
+    d.fill(0);
+  }
+}
+
+/** ROUT diversification input for a card's K_SDMFileRead: UID (7) || batch id (16). */
+export function cardDivInput(uid: Uint8Array, batchId: Uint8Array): Uint8Array {
+  if (uid.length !== UID_LEN || batchId.length !== 16) throw new TypeError("sdm_div_input_parts");
+  const m = new Uint8Array(UID_LEN + 16);
+  m.set(uid, 0);
+  m.set(batchId, UID_LEN);
+  return m;
+}
+
+/**
+ * Unauthenticated PICCData decryption with the fleet K_SDMMetaRead: only to find
+ * which card tapped. Nothing here is trusted until verifySdmTap checks the CMAC.
+ * Returns null when the plaintext does not look like UID + counter PICCData.
+ * The caller wipes `uid`.
+ */
+export function decryptPiccData(metaReadKey: Uint8Array, piccData: string): { uid: Uint8Array; readCounter: number } | null {
+  checkKey(metaReadKey);
+  let encrypted: Uint8Array;
+  try {
+    encrypted = hexToBytes(piccData, 16);
+  } catch {
+    return null;
+  }
+  const picc = cbc(metaReadKey, new Uint8Array(16), { disablePadding: true }).decrypt(encrypted);
+  try {
+    const tag = picc[0] ?? 0;
+    if ((tag & PICC_TAG_UID) === 0 || (tag & PICC_TAG_CTR) === 0 || (tag & 0x0f) !== UID_LEN) return null;
+    const c = picc.subarray(1 + UID_LEN, 1 + UID_LEN + 3);
+    return { uid: picc.slice(1, 1 + UID_LEN), readCounter: (c[0] ?? 0) | ((c[1] ?? 0) << 8) | ((c[2] ?? 0) << 16) };
+  } finally {
+    picc.fill(0);
+  }
+}
+
+/** Index of a card in the database: HMAC-SHA-256(UID-index key, "rout-sdm-uid:v1" || UID). Never the raw UID. */
+export function uidIndex(uidIndexKey: Uint8Array, uid: Uint8Array): Uint8Array {
+  if (uidIndexKey.length !== 32 || uid.length !== UID_LEN) throw new TypeError("sdm_uid_index_input");
+  const label = new TextEncoder().encode("rout-sdm-uid:v1");
+  const msg = new Uint8Array(label.length + UID_LEN);
+  msg.set(label, 0);
+  msg.set(uid, label.length);
+  try {
+    return hmac(sha256, uidIndexKey, msg);
+  } finally {
+    msg.fill(0);
   }
 }

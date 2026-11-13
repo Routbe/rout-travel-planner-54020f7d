@@ -14,7 +14,7 @@
 import { z } from "zod";
 import { cleanContextId } from "@/lib/db-context";
 import { ENVELOPE_MAX_BYTES } from "@/lib/crypto-enclave/pqc-envelope";
-import { OPAQUE_TOKEN_KINDS, opaqueTokenKind, parseOpaqueToken, type OpaqueToken, type OpaqueTokenKind } from "./token-boundary";
+import { isTapGrant, OPAQUE_TOKEN_KINDS, opaqueTokenKind, parseOpaqueToken, type OpaqueToken, type OpaqueTokenKind, type TapGrant } from "./token-boundary";
 
 /** An authenticated member (public user id from the server session, never from input). */
 export type VaultCaller = { readonly userId: string };
@@ -34,6 +34,19 @@ export type SdmRecoveryChallenge = {
   readonly lastCounter: number | null;
 };
 
+/** A sealed fleet key (K_SDMMetaRead + UID-index key), db/0245. */
+export type SdmFleetKey = { readonly fleetId: string; readonly ownerUserId: string; readonly envelope: Uint8Array };
+/** An open tap attempt (db/0245): counted as a failure until confirmed. */
+export type SdmTapChallenge = {
+  readonly attemptId: string;
+  readonly batchId: string;
+  readonly batchOwner: string;
+  readonly envelope: Uint8Array;
+  readonly lastCounter: number | null;
+};
+export type SdmTapPurpose = "public_proof" | "step_up";
+export type SdmCardState = "active" | "unactivated";
+
 export interface IVaultPort {
   /** Records a just-verified passkey step-up on the enclave's own clock. */
   registerPasskeyStepUp(caller: VaultCaller, proofId: string): Promise<void>;
@@ -51,6 +64,20 @@ export interface IVaultPort {
   beginSdmRecovery(cardId: string, tap: SdmTapBytes): Promise<SdmRecoveryChallenge>;
   /** Closes the attempt; true only for a verified tap with a strictly higher counter. */
   confirmSdmRecovery(attemptId: string, tap: SdmTapBytes, verified: boolean, readCounter: number | null): Promise<boolean>;
+  /** Admin: links one of the caller's own sdm_ envelopes as a fleet key. */
+  registerSdmFleetKey(caller: VaultCaller, sdmRef: OpaqueToken<"sdm">): Promise<string>;
+  /** Admin: links one of the caller's own sdm_ envelopes as a batch master. */
+  registerSdmBatch(caller: VaultCaller, fleetId: string, sdmRef: OpaqueToken<"sdm">, label: string): Promise<string>;
+  /** Admin, batch owner: imports a manifest of uid hashes (and optional activation hashes). */
+  registerSdmBatchCards(caller: VaultCaller, batchId: string, uidHashes: readonly Uint8Array[], activationHashes: readonly (Uint8Array | null)[] | null): Promise<number>;
+  /** Pre-authentication: the active sealed fleet keys. */
+  sdmFleetKeys(): Promise<SdmFleetKey[]>;
+  /** Pre-authentication: opens a tap attempt for the card behind uidHash (lockout-checked). */
+  beginSdmTap(fleetId: string, uidHash: Uint8Array, tap: SdmTapBytes): Promise<SdmTapChallenge>;
+  /** Closes the attempt; a single-use tap_ grant only for a verified, strictly newer tap. */
+  confirmSdmTap(attemptId: string, tap: SdmTapBytes, verified: boolean, readCounter: number | null): Promise<TapGrant | null>;
+  /** Spends a tap_ grant once for one purpose; step_up needs the card owner as caller. */
+  consumeSdmTap(caller: VaultCaller | null, grant: TapGrant, purpose: SdmTapPurpose): Promise<SdmCardState | null>;
 }
 
 export class VaultDeniedError extends Error {
@@ -95,6 +122,31 @@ const SdmRetrieveRow = z.object({
   payload_hex: z.string().max(ENVELOPE_MAX_BYTES * 2).nullable(),
   last_counter: z.number().int().min(0).max(0xfffffe).nullable(),
 });
+const FleetRow = z.object({
+  fleet_id: z.string().regex(UUID_RE),
+  owner_user_id: z.string().regex(UUID_RE),
+  payload_hex: z.string().max(ENVELOPE_MAX_BYTES * 2),
+});
+const TapBeginRow = z.object({
+  granted: z.boolean(),
+  attempt_id: z.string().regex(UUID_RE).nullable(),
+  batch_id: z.string().regex(UUID_RE).nullable(),
+  batch_owner: z.string().regex(UUID_RE).nullable(),
+  payload_hex: z.string().max(ENVELOPE_MAX_BYTES * 2).nullable(),
+  last_counter: z.number().int().min(0).max(0xfffffe).nullable(),
+});
+function parseRef(ref: OpaqueToken<"sdm">): string {
+  try {
+    return parseOpaqueToken(ref, "sdm");
+  } catch {
+    throw new VaultDeniedError();
+  }
+}
+function uuidOf(rows: readonly Record<string, unknown>[]): string {
+  const id = rows[0]?.["id"];
+  if (typeof id !== "string" || !UUID_RE.test(id)) throw new VaultDeniedError();
+  return id;
+}
 /** Anonymous (pre-authentication) calls run with an empty caller context. */
 const NO_CALLER = "";
 
@@ -234,6 +286,74 @@ export class LocalPostgresVaultAdapter implements IVaultPort {
     );
     const row = RegisterRow.safeParse(rows[0]);
     return row.success && row.data.ok;
+  }
+
+  async registerSdmFleetKey(caller: VaultCaller, sdmRef: OpaqueToken<"sdm">): Promise<string> {
+    const rows = await this.exec(callerId(caller), "select vault_enclave.register_sdm_fleet_key($1)::text as id", [parseRef(sdmRef)]);
+    return uuidOf(rows);
+  }
+
+  async registerSdmBatch(caller: VaultCaller, fleetId: string, sdmRef: OpaqueToken<"sdm">, label: string): Promise<string> {
+    if (!UUID_RE.test(fleetId) || typeof label !== "string" || label.length > 80) throw new VaultDeniedError();
+    const rows = await this.exec(callerId(caller), "select vault_enclave.register_sdm_batch($1::uuid, $2, $3)::text as id", [fleetId, parseRef(sdmRef), label]);
+    return uuidOf(rows);
+  }
+
+  async registerSdmBatchCards(caller: VaultCaller, batchId: string, uidHashes: readonly Uint8Array[], activationHashes: readonly (Uint8Array | null)[] | null): Promise<number> {
+    if (!UUID_RE.test(batchId) || uidHashes.length < 1 || uidHashes.length > 5000) throw new VaultDeniedError();
+    if (uidHashes.some((h) => h.length !== 32)) throw new VaultDeniedError();
+    if (activationHashes && (activationHashes.length !== uidHashes.length || activationHashes.some((h) => h !== null && h.length !== 32))) throw new VaultDeniedError();
+    // Hex text arrays keep the statement portable across drivers.
+    const rows = await this.exec(
+      callerId(caller),
+      "select vault_enclave.register_sdm_batch_cards($1::uuid, (select array_agg(decode(x, 'hex') order by i) from unnest($2::text[]) with ordinality u(x, i)), (select array_agg(case when x = '' then null else decode(x, 'hex') end order by i) from unnest($3::text[]) with ordinality a(x, i))) as n",
+      [batchId, uidHashes.map(toHex), activationHashes ? activationHashes.map((h) => (h ? toHex(h) : "")) : null],
+    );
+    const row = z.object({ n: z.number().int().min(0).nullable() }).safeParse(rows[0]);
+    if (!row.success || row.data.n === null) throw new VaultDeniedError();
+    return row.data.n;
+  }
+
+  async sdmFleetKeys(): Promise<SdmFleetKey[]> {
+    const rows = await this.exec(NO_CALLER, "select fleet_id::text as fleet_id, owner_user_id::text as owner_user_id, encode(encrypted_payload, 'hex') as payload_hex from vault_enclave.sdm_tap_fleet_keys()", []);
+    const parsed = z.array(FleetRow).max(4).safeParse(rows);
+    if (!parsed.success) throw new VaultDeniedError();
+    return parsed.data.map((r) => ({ fleetId: r.fleet_id, ownerUserId: r.owner_user_id, envelope: fromHex(r.payload_hex) }));
+  }
+
+  async beginSdmTap(fleetId: string, uidHash: Uint8Array, tap: SdmTapBytes): Promise<SdmTapChallenge> {
+    if (!UUID_RE.test(fleetId) || uidHash.length !== 32) throw new VaultDeniedError();
+    const [picc, mac] = tapHex(tap);
+    const rows = await this.exec(
+      NO_CALLER,
+      "select granted, attempt_id::text as attempt_id, batch_id::text as batch_id, batch_owner::text as batch_owner, encode(encrypted_payload, 'hex') as payload_hex, last_counter from vault_enclave.begin_sdm_tap($1::uuid, decode($2, 'hex'), decode($3, 'hex'), decode($4, 'hex'))",
+      [fleetId, toHex(uidHash), picc, mac],
+    );
+    const row = TapBeginRow.safeParse(rows[0]);
+    if (!row.success || !row.data.granted || !row.data.attempt_id || !row.data.batch_id || !row.data.batch_owner || !row.data.payload_hex) {
+      throw new VaultDeniedError();
+    }
+    return { attemptId: row.data.attempt_id, batchId: row.data.batch_id, batchOwner: row.data.batch_owner, envelope: fromHex(row.data.payload_hex), lastCounter: row.data.last_counter };
+  }
+
+  async confirmSdmTap(attemptId: string, tap: SdmTapBytes, verified: boolean, readCounter: number | null): Promise<TapGrant | null> {
+    if (!UUID_RE.test(attemptId)) throw new VaultDeniedError();
+    const [picc, mac] = tapHex(tap);
+    const counter = readCounter !== null && Number.isInteger(readCounter) && readCounter >= 0 && readCounter <= 0xfffffe ? readCounter : null;
+    const rows = await this.exec(
+      NO_CALLER,
+      "select vault_enclave.confirm_sdm_tap($1::uuid, decode($2, 'hex'), decode($3, 'hex'), $4, $5::int) as grant_ref",
+      [attemptId, picc, mac, verified === true, counter],
+    );
+    const ref = rows[0]?.["grant_ref"];
+    return isTapGrant(ref) ? ref : null;
+  }
+
+  async consumeSdmTap(caller: VaultCaller | null, grant: TapGrant, purpose: SdmTapPurpose): Promise<SdmCardState | null> {
+    if (!isTapGrant(grant) || (purpose !== "public_proof" && purpose !== "step_up")) throw new VaultDeniedError();
+    const rows = await this.exec(caller ? callerId(caller) : NO_CALLER, "select granted, card_state from vault_enclave.consume_sdm_tap($1, $2)", [grant, purpose]);
+    const row = z.object({ granted: z.boolean(), card_state: z.enum(["active", "unactivated"]).nullable() }).safeParse(rows[0]);
+    return row.success && row.data.granted && row.data.card_state ? row.data.card_state : null;
   }
 }
 
