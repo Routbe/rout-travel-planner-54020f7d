@@ -13,6 +13,32 @@ import type { WorkspaceHub } from "./workspace-hub";
 
 type Json = string | number | boolean | null | Json[] | { [k: string]: Json };
 
+/**
+ * Image URLs a workspace logo (`workspaces.avatar_url`) may hold: our own
+ * upload handler or any https URL. Written as POSIX-compatible patterns so the
+ * publish statement applies the exact same rule in SQL.
+ */
+export const WORKSPACE_LOGO_PATTERNS = [
+  String.raw`^/api/public/avatar\?path=[0-9a-f-]{36}%2F[A-Za-z0-9._-]+$`,
+  String.raw`^https://[^\s"'<>]+$`,
+] as const;
+export const WORKSPACE_LOGO_MAX = 500;
+
+export function isWorkspaceLogoUrl(url: string): boolean {
+  return url.length <= WORKSPACE_LOGO_MAX && WORKSPACE_LOGO_PATTERNS.some((p) => new RegExp(p).test(url));
+}
+
+/**
+ * What a Studio publish does to the workspace logo: an empty photo clears it
+ * (the icon/initials show again), a valid photo becomes the logo, anything
+ * else leaves the current logo untouched.
+ */
+export function workspaceLogoAfterPublish(studioAvatar: string | null | undefined, current: string | null): string | null {
+  const v = (studioAvatar ?? "").trim();
+  if (!v) return null;
+  return isWorkspaceLogoUrl(v) ? v : current;
+}
+
 export type WorkspaceStudioPayload = {
   username: string;
   displayName: string | null;
