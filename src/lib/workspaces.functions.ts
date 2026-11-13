@@ -1,4 +1,5 @@
 import { isWorkspaceIconKey } from "./workspace-icons";
+import { isWorkspaceLogoUrl } from "./workspace-studio";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth/middleware";
